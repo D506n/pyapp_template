@@ -83,7 +83,7 @@ requires-dist = [
     { name = "colorama", specifier = ">=0.4.6" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.136.1" },
-    { name = "magutils", git = "https://github.com/D506n/magutils" },
+    { name = "magutils", git = "https://github.com/D506n/magutils.git?tag=0.1.1" },
     { name = "nanoid", specifier = ">=2.0.0" },
     { name = "orjson", specifier = ">=3.11.4" },
     { name = "pydantic", specifier = ">=2.12.5" },
@@ -635,8 +635,8 @@ wheels = [
 
 [[package]]
 name = "magutils"
-version = "0.1.0"
-source = { git = "https://github.com/D506n/magutils#944b1d7618267935c3c0e30d1892a7cd54a1b034" }
+version = "0.1.1"
+source = { git = "https://github.com/D506n/magutils.git?tag=0.1.1#eff38fc378ce5eca14216fd47be829caa58353d3" }
 dependencies = [
     { name = "aiofiles" },
     { name = "babel" },
