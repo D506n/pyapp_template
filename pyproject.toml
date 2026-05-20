@@ -13,6 +13,7 @@ dependencies = [
     "babel>=2.17.0",
     "nanoid>=2.0.0",
     "fastapi[standard]>=0.136.1",
+    "magutils",
 ]
 
 [dependency-groups]
@@ -59,3 +60,6 @@ exclude_lines = [
 [tool.deptry.per_rule_ignores]
 DEP002 = ["asyncpg", "babel"]
 DEP004 = ["git", "kubernetes", "pathspec"]
+
+[tool.uv.sources]
+magutils = { git = "https://github.com/D506n/magutils" }

@@ -1,5 +1,5 @@
-from src.utils.env import environ
-from src.utils.env.mixins import APIMixin
+from magutils.env import environ
+from magutils.env.mixins import APIMixin
 
 
 @environ()

@@ -57,6 +57,7 @@ dependencies = [
     { name = "colorama" },
     { name = "dotenv" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "magutils" },
     { name = "nanoid" },
     { name = "orjson" },
     { name = "pydantic" },
@@ -82,6 +83,7 @@ requires-dist = [
     { name = "colorama", specifier = ">=0.4.6" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.136.1" },
+    { name = "magutils", git = "https://github.com/D506n/magutils" },
     { name = "nanoid", specifier = ">=2.0.0" },
     { name = "orjson", specifier = ">=3.11.4" },
     { name = "pydantic", specifier = ">=2.12.5" },
@@ -276,6 +278,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/96/38086d58a181aac86d503dfa9c47eb20715a79c3e3acbdf786e92e5c09a8/coverage-7.13.4-cp314-cp314t-win_amd64.whl", hash = "sha256:4c7d3cc01e7350f2f0f6f7036caaf5673fb56b6998889ccfe9e1c1fe75a9c932", size = 224148, upload-time = "2026-02-09T12:58:58.645Z" },
     { url = "https://files.pythonhosted.org/packages/ce/72/8d10abd3740a0beb98c305e0c3faf454366221c0f37a8bcf8f60020bb65a/coverage-7.13.4-cp314-cp314t-win_arm64.whl", hash = "sha256:23e3f687cf945070d1c90f85db66d11e3025665d8dafa831301a0e0038f3db9b", size = 222172, upload-time = "2026-02-09T12:59:00.396Z" },
     { url = "https://files.pythonhosted.org/packages/0d/4a/331fe2caf6799d591109bb9c08083080f6de90a823695d412a935622abb2/coverage-7.13.4-py3-none-any.whl", hash = "sha256:1af1641e57cf7ba1bd67d677c9abdbcd6cc2ab7da3bca7fa1e2b7e50e65f2ad0", size = 211242, upload-time = "2026-02-09T12:59:02.032Z" },
+]
+
+[[package]]
+name = "cron-parser-py"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/39/74/1603da497dd7bc3cfedff7e98e70f1d515b30609eaac826526ab95ed9cb0/cron_parser_py-1.0.0.tar.gz", hash = "sha256:f6627618cb0588be2b0e7ad3b4739b3473bc54ae799a7b2fc2215c718e8b84ec", size = 17064, upload-time = "2026-05-04T02:11:06.644Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/79/534f953ae81a0bc06a1b9d59e42d3b37de5f626e5665a8804e473186fe1c/cron_parser_py-1.0.0-py3-none-any.whl", hash = "sha256:583443bca6cb2d38b2eed07e9c34da7bea55f44de50e9eb0f5e4d83eeb3e2121", size = 21551, upload-time = "2026-05-04T02:11:04.951Z" },
 ]
 
 [[package]]
@@ -620,6 +631,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2c/8f/85bf51ad4150f64e8c665daf0d9dfe9787ae92005efb9a4d1cba592bd79d/kubernetes-35.0.0.tar.gz", hash = "sha256:3d00d344944239821458b9efd484d6df9f011da367ecb155dadf9513f05f09ee", size = 1094642, upload-time = "2026-01-16T01:05:27.76Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/70/05b685ea2dffcb2adbf3cdcea5d8865b7bc66f67249084cf845012a0ff13/kubernetes-35.0.0-py2.py3-none-any.whl", hash = "sha256:39e2b33b46e5834ef6c3985ebfe2047ab39135d41de51ce7641a7ca5b372a13d", size = 2017602, upload-time = "2026-01-16T01:05:25.991Z" },
+]
+
+[[package]]
+name = "magutils"
+version = "0.1.0"
+source = { git = "https://github.com/D506n/magutils#944b1d7618267935c3c0e30d1892a7cd54a1b034" }
+dependencies = [
+    { name = "aiofiles" },
+    { name = "babel" },
+    { name = "colorama" },
+    { name = "cron-parser-py" },
+    { name = "dotenv" },
+    { name = "nanoid" },
+    { name = "orjson" },
+    { name = "pydantic" },
 ]
 
 [[package]]
