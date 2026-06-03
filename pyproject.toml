@@ -62,4 +62,4 @@ DEP002 = ["asyncpg", "babel"]
 DEP004 = ["git", "kubernetes", "pathspec"]
 
 [tool.uv.sources]
-magutils = { git = "https://github.com/D506n/magutils.git", tag = "0.1.1" }
+magutils = { git = "https://github.com/D506n/magutils.git" }
