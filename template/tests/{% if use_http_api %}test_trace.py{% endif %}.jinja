@@ -112,7 +112,7 @@ async def test_mounted_mcp_is_inside_trace_context() -> None:
     # Import after test initialization; this is the public application entry point.
     from main import app
     sink = Sink()
-    request_scope = scope([(b"x-trace-id", b"mounted"), (b"accept", b"application/json, text/event-stream")])
+    request_scope = scope([(b"x-trace-id", b"mounted"), (b"accept", b"application/json, text/event-stream"), (b"authorization", b"Bearer synthetic-contract-token")])
     request_scope.update(path="/mcp/", raw_path=b"/mcp/", method="DELETE")
     async with app.router.lifespan_context(app):
         await app(request_scope, sink.receive, sink.send)

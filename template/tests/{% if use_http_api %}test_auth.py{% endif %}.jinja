@@ -1,0 +1,117 @@
+"""Public HTTP authentication, trace ordering and actual FastAPI DI contract."""
+import asyncio
+import os
+from typing import Any
+
+import httpx
+import pytest
+
+from main import app
+from src.api.dependencies import TraceId, get_trace_id
+from src.api.middlewares.auth import BearerAuthMiddleware
+from src.api.middlewares.trace import TraceIDMiddleware
+from src.env import Settings
+
+TOKEN = "synthetic-contract-token"
+
+
+async def trace_endpoint(trace_id: TraceId) -> dict:
+    await asyncio.sleep(.01)
+    return {"trace": trace_id, "context": get_trace_id()}
+
+
+app.add_api_route("/contract-di", trace_endpoint, methods=["GET"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("headers", [[], [("Authorization", "Bearer wrong-marker")], [("Authorization", "Bearer")], [("Authorization", "Basic whatever")], [("Authorization", "Bearer " + TOKEN + " extra")], [("Authorization", "Bearer " + TOKEN), ("authorization", "Bearer " + TOKEN)]])
+async def test_unauthorized(headers: list) -> None:
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/health", headers=headers)
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Unauthorized"}
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert TOKEN not in response.text and "wrong-marker" not in response.text
+    assert "x-trace-id" not in response.headers
+    assert get_trace_id() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheme", ["Bearer", "bearer", "bEaReR"])
+async def test_correct_token(scheme: str) -> None:
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/health", headers={"Authorization": scheme + " " + TOKEN})
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_docs_exact_exemptions_and_no_prefix_bypass() -> None:
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            for path in ("/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json", "/docs?x=1"):
+                response = await client.get(path)
+                assert response.status_code == 200, path
+            schema = (await client.get("/openapi.json")).json()
+            assert not schema["paths"]["/health"]["get"].get("parameters", [])
+            for path in ("/docs/", "/docs/child", "/docs-extra", "/redoc/child", "/openapi.json/child", "/docs/oauth2-redirect/child", "/mcp", "/mcp/"):
+                response = await client.get(path)
+                assert response.status_code == 401, path
+
+
+@pytest.mark.asyncio
+async def test_actual_di_missing_empty_literal_and_concurrent() -> None:
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", headers={"Authorization": "Bearer " + TOKEN}) as client:
+            missing = await client.get("/contract-di")
+            assert missing.json() == {"trace": None, "context": None}
+            values = ["", " literal trace ", "one", "two"]
+            responses = await asyncio.wait_for(asyncio.gather(*[client.get("/contract-di", headers={"X-Trace-ID": value}) for value in values]), 10)
+            for value, response in zip(values, responses):
+                assert response.status_code == 200
+                assert response.json() == {"trace": value, "context": value}
+    assert get_trace_id() is None
+
+
+class Probe:
+    def __init__(self) -> None:
+        self.called = False
+        self.messages: list = []
+        self.trace: list = []
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        self.called = True
+
+    async def receive(self) -> dict:
+        return {"type": "websocket.connect"}
+
+    async def send(self, message: dict) -> None:
+        self.messages.append(message)
+        self.trace.append(get_trace_id())
+
+
+@pytest.mark.asyncio
+async def test_websocket_unauthorized_close() -> None:
+    probe = Probe()
+    await BearerAuthMiddleware(probe)({"type": "websocket", "path": "/private", "headers": []}, probe.receive, probe.send)
+    assert not probe.called
+    assert probe.messages == [{"type": "websocket.close", "code": 1008}]
+
+
+@pytest.mark.asyncio
+async def test_trace_wraps_unauthorized_app_response() -> None:
+    probe = Probe()
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "GET", "scheme": "http", "path": "/health", "raw_path": b"/health", "query_string": b"", "root_path": "", "headers": [(b"x-trace-id", b"unauthorized-trace")], "server": ("test", 80), "client": ("test", 1000)}
+    async with app.router.lifespan_context(app):
+        await app(scope, probe.receive, probe.send)
+    assert probe.messages[0]["status"] == 401
+    assert all(value == "unauthorized-trace" for value in probe.trace)
+    assert get_trace_id() is None
+
+
+def test_settings_secret_not_in_repr() -> None:
+    settings = Settings()
+    assert settings.api_token == TOKEN
+    assert TOKEN not in repr(settings)

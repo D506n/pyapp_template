@@ -1,0 +1,5 @@
+"""Only synthetic credentials are used by generated contract tests."""
+import os
+{% if use_http_api %}
+os.environ["API_TOKEN"] = "synthetic-contract-token"
+{% endif %}

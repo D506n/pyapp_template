@@ -112,7 +112,7 @@ use_magutils:
   when: "{{ settings_backend != 'magutils' }}"
 use_http_client:
   type: bool
-  help: Добавить HTTP-клиент httpx?
+  help: Добавить зависимость httpx (без готового клиента)?
   default: false
 install_dependencies:
   type: bool

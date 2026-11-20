@@ -56,7 +56,7 @@ class GeneratorContract(unittest.TestCase):
                 self.assertNotIn("scripts", metadata["project"])
                 for required in ("main.py", "config.py", "src/env.py"):
                     self.assertIn(required, paths)
-                for path, enabled in {"src/api/v1/health.py": http, "src/mcp/tools/ping.py": mcp, "src/connectors/db/conn.py": db != "none", "src/connectors/http.py": client}.items():
+                for path, enabled in {"src/api/v1/health.py": http, "src/mcp/tools/ping.py": mcp, "src/connectors/db/conn.py": db != "none", "src/connectors/http.py": False, "src/api/middlewares/auth.py": http, "src/api/dependencies.py": http, "src/connectors": db != "none"}.items():
                     self.assertEqual(path in paths, enabled)
 
     def test_free_text_round_trip(self) -> None:

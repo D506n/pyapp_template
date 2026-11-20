@@ -1,0 +1,42 @@
+"""Сохранение токена API между последовательными запусками сервиса."""
+
+import os
+import re
+import shlex
+from pathlib import Path
+from secrets import token_hex
+
+
+def load_api_token() -> str:
+    """Прочитать API_TOKEN или создать его в .env текущего каталога."""
+    configured = os.getenv("API_TOKEN")
+    if configured:
+        return configured
+    path = Path.cwd() / ".env"
+    try:
+        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        saved = ""
+        for line in content.splitlines():
+            match = re.fullmatch(r"\s*(?:export\s+)?API_TOKEN\s*=\s*(.*)", line)
+            if match:
+                value = match[1].strip()
+                if value.startswith(("'", '"')):
+                    values = shlex.split(value, comments=True)
+                    if len(values) != 1:
+                        raise ValueError("Некорректная строка API_TOKEN")
+                    saved = values[0]
+                else:
+                    saved = re.split(r"\s+#", value, maxsplit=1)[0].strip()
+        if saved:
+            return saved
+        generated = token_hex(16)
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(descriptor, "a", encoding="utf-8") as stream:
+            if content and not content.endswith("\n"):
+                stream.write("\n")
+            stream.write(f"API_TOKEN={generated}\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError, UnicodeError, ValueError:
+        raise ValueError("Не удалось прочитать или сохранить API_TOKEN в .env") from None
+    return generated

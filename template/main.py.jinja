@@ -9,6 +9,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from config import lifespan
+from src.api.middlewares.auth import BearerAuthMiddleware
 from src.api.middlewares.trace import TraceIDMiddleware
 from src.api.v1.root import router
 {% endif %}
@@ -34,6 +35,7 @@ app = FastAPI(
     title={{ project_name | tojson }},
     lifespan=lifespan,
 )
+app.add_middleware(BearerAuthMiddleware)
 app.add_middleware(TraceIDMiddleware)
 app.include_router(router)
 {% if use_mcp %}
