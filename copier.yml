@@ -119,32 +119,7 @@ install_dependencies:
   help: Установить зависимости сейчас?
   default: false
   validator: >-
-    {% set reserved_distributions = [
-      "aiofile", "aiosqlite", "alembic", "annotated-doc", "annotated-types", "anyio", "asyncmy",
-      "asyncpg", "attrs", "authlib", "bandit", "beartype", "boolean-py", "cachecontrol",
-      "cachetools", "caio", "certifi", "cffi", "charset-normalizer", "click", "colorama", "copier",
-      "cryptography", "cyclonedx-python-lib", "cyclopts", "defusedxml", "dnspython",
-      "docstring-parser", "dunamai", "editables", "email-validator", "exceptiongroup", "fastapi",
-      "fastmcp", "fastmcp-slim", "filelock", "funcy", "greenlet", "griffelib", "h11", "hatchling",
-      "httpcore", "httpcore2", "httpx", "httpx2", "httpx2-jsfetch", "idna", "iniconfig", "jinja2",
-      "jinja2-ansible-filters", "joserfc", "jsonref", "jsonschema", "jsonschema-path",
-      "jsonschema-specifications", "license-expression", "magutils", "aiolimiter", "babel", "cron-parser-py", "dotenv", "fastnanoid", "orjson", "starlark-pyo3", "tzdata", "mako", "markdown-it-py", "markupsafe",
-      "mcp", "mcp-types", "mdurl", "msgpack", "openapi-pydantic", "opentelemetry-api",
-      "packageurl-python", "packaging", "pathable", "pathspec", "pip", "pip-api", "pip-audit",
-      "pip-requirements-parser", "platformdirs", "pluggy", "plumbum", "prompt-toolkit",
-      "py-key-value-aio", "py-serializable", "pycparser", "pydantic", "pydantic-core",
-      "pydantic-settings", "pygments", "pyjwt", "pyparsing", "pyperclip", "pytest", "pytest-asyncio",
-      "python-dotenv", "python-multipart", "pywin32", "pyyaml", "questionary", "referencing",
-      "requests", "rich", "rich-rst", "rpds-py", "ruff", "sortedcontainers", "sqlalchemy",
-      "sse-starlette", "starlette", "stevedore", "tomli", "tomli-w", "trove-classifiers",
-      "truststore", "typing-extensions", "typing-inspection", "uncalled-for", "urllib3", "uvicorn",
-      "watchfiles", "wcwidth", "websockets"
-    ] %}
-    {% if not (project_name | regex_search('^[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z')) or project_name|length > 64 %}
-    Имя каталога должно содержать до 64 строчных латинских букв, цифр и одиночных дефисов, начиная с буквы.
-    {% elif project_name in reserved_distributions %}
-    Выберите имя каталога, не совпадающее с поддерживаемой зависимостью.
-    {% elif not use_http_api and not use_mcp %}Включите хотя бы один интерфейс — HTTP API или MCP.
+    {% if not use_http_api and not use_mcp %}Включите хотя бы один интерфейс — HTTP API или MCP.
     {% elif http_framework != 'fastapi' %}Поддерживается только FastAPI.
     {% elif use_http_api and use_mcp and mcp_transport != 'http' %}Совместные HTTP API и MCP требуют транспорта http.
     {% elif database == 'none' and use_alembic %}Alembic требует SQL-БД.

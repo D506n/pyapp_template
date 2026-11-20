@@ -1,5 +1,5 @@
 [project]
-name = {{ project_name | tojson }}
+name = {{ ('app-' ~ (project_name | regex_replace('[^A-Za-z0-9]+', '-') | trim('-') | lower or 'app')) | tojson }}
 version = "0.1.0"
 description = {{ description | to_json(ensure_ascii=False) }}
 authors = [{name = {{ author_name | to_json(ensure_ascii=False) }}}]
