@@ -1,0 +1,163 @@
+# {{ project_name }}
+
+{{ description | e }}
+
+Python 3.14; uv manages dependencies. Author: {{ author_name | e }}.
+{% if project_license == 'MIT' %}
+Licensed under MIT; see LICENSE.
+{% else %}
+No project license selected. No license grant is provided; choose a license before distribution.
+{% endif %}
+
+## Bootstrap and run
+
+Generation has not installed dependencies, created a lockfile, contacted a database,
+or initialized Git. Run explicitly:
+
+```sh
+uv lock
+uv sync --locked
+{% if database != 'none' %}
+# Set DATABASE_URL for your selected environment before starting (see below).
+{% endif %}
+uv run python -m {{ package_name }}
+```
+
+The equivalent console entry point is `uv run {{ project_name }}`. Keep and review
+`uv.lock`; subsequent installations use `uv sync --locked`.
+{% if use_http_api or mcp_transport == 'http' %}
+`HOST` defaults to `127.0.0.1`, `PORT` to `8000`. ASGI entry point:
+`{{ package_name }}.app:app`. Set environment variables explicitly to override them.
+{% endif %}
+{% if use_http_api %}
+
+## HTTP API
+
+The pure ASGI middleware stores incoming `X-Trace-ID` in a request-local `ContextVar`.
+Read it with `{{ package_name }}.trace.get_trace_id() -> str | None`.
+Header names are case-insensitive. The first value is preserved as decoded by ASGI
+(including an empty string); absent means `None`. No ID is generated or validated,
+and no response header is added. The context resets in `finally` after normal,
+failed or cancelled requests, and also covers mounted MCP in a combined application.
+Do not treat unvalidated incoming trace IDs as trusted data when logging or displaying.
+
+
+`GET /health` returns HTTP 200 with `{"status":"ok"}`. It is a liveness check,
+not a database or external dependency readiness check. FastAPI exposes `/docs`.
+
+```sh
+curl http://127.0.0.1:8000/health
+```
+{% endif %}
+{% if use_mcp %}
+
+## MCP
+
+Transport: **{{ 'http' if use_http_api else mcp_transport }}**.
+Tool `ping` takes an empty argument object `{}` and returns the string `pong`.
+It performs no external actions. MCP clients initialize the connection, list tools,
+then call `ping`; invalid arguments are reported as protocol/tool errors.
+{% if use_http_api or mcp_transport == 'http' %}
+Connect a Streamable HTTP MCP client to `http://127.0.0.1:8000/mcp{{ '/' if use_http_api else '' }}`.
+{% if use_http_api %}
+The FastAPI lifespan starts and stops the mounted MCP service; `/mcp` may redirect to `/mcp/`.
+{% endif %}
+{% else %}
+Configure the client to execute `uv run python -m {{ package_name }}` from this
+project directory. Stdout is reserved for MCP protocol messages; logs use stderr.
+Stop via the client's normal shutdown/EOF sequence.
+{% endif %}
+{% endif %}
+{% if database != 'none' %}
+
+## Async database
+
+Selected database: **{{ database }}**. Set `DATABASE_URL` in the process environment.
+Examples below are placeholders, never real credentials:
+
+```text
+{% if database == 'postgresql' %}
+postgresql+asyncpg://USER:PASSWORD@HOST:5432/DATABASE
+{% elif database == 'mysql' %}
+mysql+asyncmy://USER:PASSWORD@HOST:3306/DATABASE
+{% else %}
+sqlite+aiosqlite:///./app.db
+{% endif %}
+```
+
+`{{ package_name }}.database.database_url(value)` validates the selected async driver
+and database; missing or incompatible URLs raise a redacted `ValueError`.
+`create_engine(value)` creates an async engine without connecting.
+`session_factory(engine)` returns an `async_sessionmaker` with `expire_on_commit=False`.
+Use `async with session_factory(engine)() as session` and an explicit transaction
+(`async with session.begin()`) for writes. Connections exist only while used.
+Dispose engines you create with `await engine.dispose()` in a `finally` block.
+The service lifespan owns and disposes its own engine. No models, tables, CRUD or
+schema creation are supplied; `Base.metadata` is initially empty.
+{% if use_alembic %}
+
+### Explicit migrations
+
+Review the environment and DATABASE_URL before each command. Import application
+models in `migrations/env.py` when you add them so autogenerate can see their metadata.
+
+```sh
+uv run alembic revision --autogenerate -m "describe change"
+uv run --locked ruff check --select I --fix migrations
+just format-src
+uv run --locked ruff check migrations
+uv run --locked ruff format --check migrations
+# Review the generated revision; agree on any missing transformation before applying it.
+uv run alembic upgrade head
+```
+
+After generating or editing a revision, sort its imports and run `just format-src`
+as shown above before checks or applying it. Alembic emits Python source that may
+need formatting, including quote normalization. Inspect these mechanical changes
+and the migration operations; formatting does not establish migration correctness.
+
+Migrations use the selected async driver and run only on explicit command. Offline
+mode is unsupported. Never call `create_all` as a substitute for migration history.
+{% if database == 'sqlite' %}
+SQLite migrations enable batch rendering for table alterations; review generated
+batch operations, database file location and backup requirements before applying.
+{% endif %}
+{% endif %}
+{% endif %}
+
+## Configuration and resources
+
+{% if use_settings %}
+`Settings` uses typed pydantic-settings environment fields. No `.env` is loaded
+implicitly; invalid values raise validation errors with input values hidden.
+{% else %}
+`Settings` reads environment variables using the standard library; pydantic-settings
+is not a direct runtime dependency. No `.env` loader is used.
+{% endif %}
+{% if use_http_client %}
+The lifespan opens an `httpx.AsyncClient` with a 10-second timeout and closes it
+on shutdown, including failure paths. `resources()` yields it as `state["http_client"]`.
+{% endif %}
+`{{ package_name }}.resources.resources()` is an async context manager yielding the
+selected resource dictionary. Do not hold SQL transactions during external requests.
+Application logs use standard `logging`; do not log credentials or DATABASE_URL.
+{% if use_mcp %}
+The MCP lifespan owns resources; retrieve its state via FastMCP's lifespan context.
+{% elif use_http_api %}
+HTTP handlers can access lifespan resources through `request.app.state.resources`.
+{% endif %}
+
+## Checks
+
+```sh
+just precommit-check-agent
+```
+
+pytest supports async tests; Ruff excludes tests but checks application and migration
+Python. Bandit and pip-audit are included. HTTPX is also a development dependency for
+transport checks, independently of the optional runtime client. No CI, Docker,
+authentication, deployment, or automatic migrations are configured.
+
+The original template MIT notice is retained in `THIRD_PARTY_NOTICES.md` in generated
+projects, including when the project license is `none`. This does not license newly
+added project code automatically.

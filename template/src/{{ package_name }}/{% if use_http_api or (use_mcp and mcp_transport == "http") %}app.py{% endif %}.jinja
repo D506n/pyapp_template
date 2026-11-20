@@ -1,0 +1,54 @@
+"""ASGI entry point. Resources start only during the application lifespan."""
+
+{% if use_http_api %}
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+{% if not use_mcp %}
+from {{ package_name }}.resources import resources
+{% endif %}
+{% endif %}
+{% if use_mcp %}
+from {{ package_name }}.mcp_server import mcp
+{% endif %}
+{% if use_http_api %}
+from {{ package_name }}.trace import TraceIDMiddleware
+{% endif %}
+{% if use_mcp %}
+
+mcp_app = mcp.http_app(path="{{ '/' if use_http_api else '/mcp' }}")
+{% endif %}
+{% if use_http_api %}
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI) -> AsyncGenerator[None]:
+{% if use_mcp %}
+    async with mcp_app.lifespan(application):
+        yield
+{% else %}
+    async with resources() as state:
+        application.state.resources = state
+        yield
+{% endif %}
+
+
+app = FastAPI(
+    title={{ project_name | tojson }},
+    lifespan=lifespan,
+)
+app.add_middleware(TraceIDMiddleware)
+{% if use_mcp %}
+app.mount("/mcp", mcp_app)
+{% endif %}
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    """Liveness only; does not contact databases or external services."""
+    return {"status": "ok"}
+{% else %}
+app = mcp_app
+{% endif %}

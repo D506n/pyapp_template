@@ -1,0 +1,35 @@
+"""Database interface checks; integration requires an explicitly supplied test URL."""
+import os
+
+import pytest
+from sqlalchemy import text
+
+from {{ package_name }}.database import Base, create_engine, database_url, session_factory
+
+
+def test_metadata_starts_empty() -> None:
+    assert not Base.metadata.tables
+
+
+@pytest.mark.parametrize("value", ["invalid-password-MARKER", "postgresql://user:password-MARKER@localhost/db", "mysql+pymysql://user:password-MARKER@localhost/db", "sqlite:///:memory:"])
+def test_rejects_invalid_or_sync_urls_without_secret(value: str) -> None:
+    with pytest.raises(Exception) as caught:
+        database_url(value)
+    assert "password-MARKER" not in str(caught.value)
+
+
+@pytest.mark.asyncio
+async def test_database_round_trip() -> None:
+{% if database == 'sqlite' %}
+    url = os.environ.get("CONTRACT_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+{% else %}
+    url = os.environ.get("CONTRACT_DATABASE_URL")
+    if not url:
+        pytest.skip("Set CONTRACT_DATABASE_URL to an isolated {{ database }} test database")
+{% endif %}
+    engine = create_engine(url)
+    try:
+        async with session_factory(engine)() as session:
+            assert (await session.execute(text("SELECT 1"))).scalar_one() == 1
+    finally:
+        await engine.dispose()
