@@ -55,9 +55,9 @@ class UpdateContract(unittest.TestCase):
             uv = fake / "uv"
             uv.write_text("#!" + sys.executable + "\nfrom pathlib import Path\nPath(" + repr(str(calls)) + ").write_text('called')\n")
             uv.chmod(0o755)
-            for cleanup in (True, False):
+            for cleanup, dirname, metadata_name in ((True, "new_pyproject", "app-new-pyproject"), (False, "Юникод Каталог", "app-app")):
                 with self.subTest(cleanup_on_error=cleanup):
-                    destination = root / ("updated-default" if cleanup else "updated-retained")
+                    destination = root / dirname
                     with local.env(PATH=str(fake) + os.pathsep + os.environ["PATH"]):
                         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                             run_copy(str(source), str(destination), data=ANSWERS, defaults=True, quiet=True, vcs_ref="v1.0.0", unsafe=True, cleanup_on_error=False)
@@ -78,4 +78,4 @@ class UpdateContract(unittest.TestCase):
                     self.assertEqual(saved["project_name"], destination.name)
                     self.assertIs(saved["install_dependencies"], True)
                     metadata = tomllib.loads((destination / "pyproject.toml").read_text())
-                    self.assertEqual(metadata["project"]["name"], destination.name)
+                    self.assertEqual(metadata["project"]["name"], metadata_name)

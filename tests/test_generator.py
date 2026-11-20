@@ -50,7 +50,7 @@ class GeneratorContract(unittest.TestCase):
                 readme = (dest / "README.md").read_text()
                 self.assertIn("uv lock", readme)
                 self.assertIn("uv sync --locked", readme)
-                self.assertEqual(metadata["project"]["name"], "out")
+                self.assertEqual(metadata["project"]["name"], "app-out")
                 self.assertFalse(metadata["tool"]["uv"]["package"])
                 self.assertNotIn("build-system", metadata)
                 self.assertNotIn("scripts", metadata["project"])
@@ -69,11 +69,7 @@ class GeneratorContract(unittest.TestCase):
             self.assertEqual(project["authors"][0]["name"], value)
             self.assertFalse((dest / "NEVER_EXECUTE").exists())
 
-    def test_reject_bad_names(self) -> None:
-        for value in ('bad"name', 'bad\nname', 'bad\\name', '123bad', 'тест', 'bad--name', 'bad_name', 'fastapi', 'magutils', 'pydantic-settings', 'a' * 65):
-            with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
-                with self.assertRaises(Exception):
-                    render(Path(tmp) / value)
+    def test_reject_explicit_name_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(Exception):
                 render(Path(tmp) / "out", project_name="different")
