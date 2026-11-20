@@ -1,4 +1,4 @@
-# Local checks only; bootstrap is explicit and may access the package index.
+# Локальные проверки; bootstrap явно устанавливает зависимости.
 bootstrap:
     uv lock
     uv sync --locked
@@ -12,7 +12,7 @@ format-ci:
     uv run --locked ruff format ci
 
 test-contract:
-    uv run --locked pytest --tb=no --show-capture=no -o log_cli=false
+    uv run --locked python -m pytest --tb=no --show-capture=no -o log_cli=false
 
 security:
     bash ci/security.sh

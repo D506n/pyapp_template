@@ -1,0 +1,9 @@
+"""Регистрация MCP-сервера и его инструментов."""
+
+from fastmcp import FastMCP
+
+from config import mcp_lifespan
+from src.mcp.tools.ping import ping
+
+mcp = FastMCP({{ project_name | tojson }}, lifespan=mcp_lifespan)
+mcp.tool(ping)

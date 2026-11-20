@@ -1,0 +1,10 @@
+"""Контекст входного trace-id текущего запроса."""
+
+from contextvars import ContextVar
+
+_trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
+
+
+def get_trace_id() -> str | None:
+    """Вернуть первый входной X-Trace-ID или None вне HTTP-запроса."""
+    return _trace_id.get()

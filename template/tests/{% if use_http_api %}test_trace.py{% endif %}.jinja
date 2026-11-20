@@ -4,7 +4,8 @@ from typing import Any
 
 import pytest
 
-from {{ package_name }}.trace import TraceIDMiddleware, get_trace_id
+from src.api.middlewares.trace import TraceIDMiddleware
+from src.context import get_trace_id
 
 
 class Probe:
@@ -46,7 +47,7 @@ def scope(headers: list) -> dict:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("headers, expected", [([], None), ([(b"x-trace-id", b"  literal-ID  ")], "  literal-ID  "), ([(b"x-trace-id", b"")], ""), ([(b"X-TrAcE-ID", b"  literal-ID  ")], "  literal-ID  "), ([(b"x-trace-id", b"first"), (b"X-TRACE-ID", b"second")], "first")])
+@pytest.mark.parametrize("headers, expected", [([], None), ([(b"x-trace-id", b"\xff")], "ÿ"), ([(b"x-trace-id", b"  literal-ID  ")], "  literal-ID  "), ([(b"x-trace-id", b"")], ""), ([(b"X-TrAcE-ID", b"  literal-ID  ")], "  literal-ID  "), ([(b"x-trace-id", b"first"), (b"X-TRACE-ID", b"second")], "first")])
 async def test_trace_values_and_reset(headers: list, expected: str | None) -> None:
     probe, sink = Probe(), Sink()
     assert get_trace_id() is None
@@ -109,7 +110,7 @@ async def test_concurrent_requests_do_not_share_context() -> None:
 @pytest.mark.asyncio
 async def test_mounted_mcp_is_inside_trace_context() -> None:
     # Import after test initialization; this is the public application entry point.
-    from {{ package_name }}.app import app
+    from main import app
     sink = Sink()
     request_scope = scope([(b"x-trace-id", b"mounted"), (b"accept", b"application/json, text/event-stream")])
     request_scope.update(path="/mcp/", raw_path=b"/mcp/", method="DELETE")

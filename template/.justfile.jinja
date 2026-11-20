@@ -1,4 +1,4 @@
-# Run bootstrap explicitly after Copier copy.
+# Запустите bootstrap явно после создания проекта.
 bootstrap:
     uv lock
     uv sync --locked
@@ -9,13 +9,13 @@ lint:
     uv run --locked ruff format --check .
 
 format-src:
-    uv run --locked ruff format src{% if use_alembic and database != 'none' %} migrations{% endif %}
+    uv run --locked ruff format main.py config.py src{% if use_alembic and database != 'none' %} migrations{% endif %}
 
 format-ci:
     uv run --locked ruff format ci
 
 test-contract:
-    uv run --locked pytest --tb=no --show-capture=no -o log_cli=false
+    uv run --locked python -m pytest --tb=no --show-capture=no -o log_cli=false
 
 security:
     bash ci/security.sh
@@ -25,9 +25,9 @@ test: test-contract
 precommit-check-agent: lint test-contract security
 
 run:
-    uv run --locked python -m {{ package_name }}
+    uv run --locked main.py
 {% if use_alembic and database != 'none' %}
-# Set DATABASE_URL explicitly; inspect every generated revision before upgrade.
+# Задайте DATABASE_URL явно; проверьте ревизию перед применением миграций.
 revision:
     uv run --locked alembic revision --autogenerate
 

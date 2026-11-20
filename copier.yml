@@ -1,21 +1,123 @@
-_min_copier_version: "9.11.0"
+_min_copier_version: "9.19.1"
 _subdirectory: template
 _answers_file: .copier-answers.yml
 _envops:
   trim_blocks: true
   lstrip_blocks: true
+_message_before_copy: |
+  Создание самостоятельного сервиса Python 3.14.
+  Имя проекта берётся из каталога назначения. Установка зависимостей — только по согласию.
 _message_after_copy: |
-  Project created. Bootstrap explicitly (generation installs nothing):
-    cd {{ _copier_conf.dst_path }}
+  Файлы проекта созданы.
+  {% if install_dependencies and not _copier_conf.skip_tasks and not _copier_conf.pretend %}
+  Установка зависимостей завершена.
+  {% else %}
+  Установка не выполнялась. Для ручной подготовки из каталога проекта:
     uv lock
     uv sync --locked
+  {% endif %}
+  Запуск из каталога проекта: uv run main.py
+# Copier передаёт операцию в динамические исключения, но не в validators вопросов.
+# Пустой результат ничего не исключает; mandatory останавливает copy до записи файлов.
+# При update сохранённое имя используется и во временных каталогах Copier.
+_exclude:
+  - copier.yml
+  - copier.yaml
+  - "~*"
+  - "*.py[co]"
+  - __pycache__
+  - .git
+  - .DS_Store
+  - .svn
+  - >-
+    {% if _copier_operation == 'copy' and project_name != _folder_name %}
+    {{ {}['invalid'] | mandatory('Имя проекта должно совпадать с именем каталога назначения; не передавайте другое project_name.') }}
+    {% elif _copier_operation == 'copy' and install_dependencies and _copier_conf.cleanup_on_error and not _copier_conf.skip_tasks and not _copier_conf.pretend %}
+    {{ {}['invalid'] | mandatory('Для установки с сохранением файлов при ошибке повторите copier copy с флагами --trust --no-cleanup; для API задайте cleanup_on_error=False.') }}
+    {% endif %}
+
+_tasks:
+  - command: [uv, sync]
+    when: "{{ install_dependencies and _copier_operation == 'copy' and not _copier_conf.pretend }}"
 
 project_name:
   type: str
-  default: my-service
-  help: Distribution name (lowercase letters, digits and single hyphens).
-  # Static reserved names cover the supported runtime/dev/build dependency union.
-  # Update these lists when dependencies change; generation performs no discovery.
+  default: "{{ _folder_name }}"
+  ask: false
+description:
+  type: str
+  help: Описание сервиса
+  default: Асинхронный Python-сервис
+author_name:
+  type: str
+  help: Имя автора
+  default: Автор проекта
+project_license:
+  type: str
+  help: Выберите лицензию проекта отдельно от лицензии шаблона
+  choices:
+    MIT: MIT
+    Без лицензии проекта: none
+use_http_api:
+  type: bool
+  help: Добавить HTTP API?
+  default: true
+http_framework:
+  type: str
+  help: HTTP-фреймворк
+  choices:
+    FastAPI: fastapi
+  default: fastapi
+  when: "{{ use_http_api }}"
+use_mcp:
+  type: bool
+  help: Добавить MCP?
+  default: false
+  validator: >-
+    {% if not use_http_api and not use_mcp %}Включите хотя бы один интерфейс — HTTP API или MCP.{% endif %}
+mcp_transport:
+  type: str
+  help: Транспорт MCP
+  choices:
+    HTTP: http
+    Стандартный ввод и вывод (stdio): stdio
+  default: http
+  when: "{{ use_mcp and not use_http_api }}"
+database:
+  type: str
+  help: База данных
+  choices:
+    Без базы данных: none
+    PostgreSQL: postgresql
+    SQLite: sqlite
+    MySQL: mysql
+  default: none
+use_alembic:
+  type: bool
+  help: Добавить миграции Alembic?
+  default: false
+  when: "{{ database != 'none' }}"
+settings_backend:
+  type: str
+  help: Способ чтения настроек
+  choices:
+    "os.getenv(...) — без внешних зависимостей": getenv
+    magutils.env: magutils
+    pydantic_settings: pydantic_settings
+  default: getenv
+use_magutils:
+  type: bool
+  help: Добавить magutils?
+  default: "{{ settings_backend == 'magutils' }}"
+  when: "{{ settings_backend != 'magutils' }}"
+use_http_client:
+  type: bool
+  help: Добавить HTTP-клиент httpx?
+  default: false
+install_dependencies:
+  type: bool
+  help: Установить зависимости сейчас?
+  default: false
   validator: >-
     {% set reserved_distributions = [
       "aiofile", "aiosqlite", "alembic", "annotated-doc", "annotated-types", "anyio", "asyncmy",
@@ -26,7 +128,7 @@ project_name:
       "fastmcp", "fastmcp-slim", "filelock", "funcy", "greenlet", "griffelib", "h11", "hatchling",
       "httpcore", "httpcore2", "httpx", "httpx2", "httpx2-jsfetch", "idna", "iniconfig", "jinja2",
       "jinja2-ansible-filters", "joserfc", "jsonref", "jsonschema", "jsonschema-path",
-      "jsonschema-specifications", "license-expression", "mako", "markdown-it-py", "markupsafe",
+      "jsonschema-specifications", "license-expression", "magutils", "aiolimiter", "babel", "cron-parser-py", "dotenv", "fastnanoid", "orjson", "starlark-pyo3", "tzdata", "mako", "markdown-it-py", "markupsafe",
       "mcp", "mcp-types", "mdurl", "msgpack", "openapi-pydantic", "opentelemetry-api",
       "packageurl-python", "packaging", "pathable", "pathspec", "pip", "pip-api", "pip-audit",
       "pip-requirements-parser", "platformdirs", "pluggy", "plumbum", "prompt-toolkit",
@@ -39,129 +141,11 @@ project_name:
       "watchfiles", "wcwidth", "websockets"
     ] %}
     {% if not (project_name | regex_search('^[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z')) or project_name|length > 64 %}
-    Use a lowercase distribution name of at most 64 characters.
+    Имя каталога должно содержать до 64 строчных латинских букв, цифр и одиночных дефисов, начиная с буквы.
     {% elif project_name in reserved_distributions %}
-    Choose a distribution name that does not conflict with the supported dependencies.
-    {% endif %}
-package_name:
-  type: str
-  default: "{{ project_name | replace('-', '_') }}"
-  help: Python import package (lowercase letters, digits, underscores).
-  validator: >-
-    {% set reserved_modules = [
-      "False", "None", "True", "__future__", "_abc", "_aix_support", "_android_support",
-      "_apple_support", "_ast", "_ast_unparse", "_asyncio", "_bisect", "_blake2", "_bz2",
-      "_cffi_backend", "_codecs", "_codecs_cn", "_codecs_hk", "_codecs_iso2022", "_codecs_jp",
-      "_codecs_kr", "_codecs_tw", "_collections", "_collections_abc", "_colorize", "_compat_pickle",
-      "_contextvars", "_csv", "_ctypes", "_curses", "_curses_panel", "_datetime", "_dbm", "_decimal",
-      "_elementtree", "_frozen_importlib", "_frozen_importlib_external", "_functools", "_gdbm",
-      "_hashlib", "_heapq", "_hmac", "_imp", "_interpchannels", "_interpqueues", "_interpreters",
-      "_io", "_ios_support", "_json", "_locale", "_lsprof", "_lzma", "_markupbase", "_md5",
-      "_multibytecodec", "_multiprocessing", "_opcode", "_opcode_metadata", "_operator",
-      "_osx_support", "_overlapped", "_pickle", "_posixshmem", "_posixsubprocess", "_py_abc",
-      "_py_warnings", "_pydatetime", "_pydecimal", "_pyio", "_pylong", "_pyrepl", "_pytest",
-      "_queue", "_random", "_remote_debugging", "_scproxy", "_sha1", "_sha2", "_sha3", "_signal",
-      "_sitebuiltins", "_socket", "_sqlite3", "_sre", "_ssl", "_stat", "_statistics", "_string",
-      "_strptime", "_struct", "_suggestions", "_symtable", "_sysconfig", "_thread",
-      "_threading_local", "_tkinter", "_tokenize", "_tracemalloc", "_types", "_typing", "_uuid",
-      "_warnings", "_weakref", "_weakrefset", "_winapi", "_wmi", "_yaml", "_zoneinfo", "_zstd",
-      "abc", "aiofile", "aiosqlite", "alembic", "and", "annotated_doc", "annotated_types",
-      "annotationlib", "antigravity", "anyio", "argparse", "array", "as", "assert", "ast", "async",
-      "asyncio", "asyncmy", "asyncpg", "atexit", "attr", "attrs", "authlib", "await", "bandit",
-      "base64", "bdb", "beartype", "binascii", "bisect", "boolean", "break", "build", "builtins",
-      "bz2", "c787785866c7b801238d__mypyc", "cProfile", "cachecontrol", "cachetools", "caio",
-      "calendar", "case", "certifi", "cffi", "charset_normalizer", "class", "click", "cloudpickle",
-      "cmath", "cmd", "code", "codecs", "codeop", "collections", "colorama", "colorsys",
-      "compileall", "compression", "concurrent", "configparser", "contextlib", "contextvars",
-      "continue", "copier", "copy", "copyreg", "cryptography", "csv", "ctypes", "curses",
-      "cyclonedx", "cyclopts", "dataclasses", "datetime", "dbm", "decimal", "def", "defusedxml",
-      "del", "difflib", "dis", "dist", "dns", "docket", "docstring_parser", "doctest", "dotenv",
-      "dunamai", "editables", "elif", "else", "email", "email_validator", "encodings", "ensurepip",
-      "enum", "errno", "except", "exceptiongroup", "fastapi", "fastmcp", "faulthandler", "fcntl",
-      "filecmp", "fileinput", "filelock", "finally", "fnmatch", "for", "fractions", "from", "ftplib",
-      "functools", "funcy", "gc", "genericpath", "getopt", "getpass", "gettext", "glob", "global",
-      "graphlib", "greenlet", "griffe", "grp", "gzip", "h11", "hashlib", "hatchling", "heapq",
-      "hmac", "html", "http", "httpcore", "httpcore2", "httpx", "httpx2", "idlelib", "idna", "if",
-      "imaplib", "import", "importlib", "in", "iniconfig", "inspect", "io", "ipaddress", "is",
-      "itertools", "jinja2", "jinja2_ansible_filters", "joserfc", "json", "jsonref", "jsonschema",
-      "jsonschema_path", "jsonschema_specifications", "jwt", "key_value", "keyword", "lambda",
-      "license_expression", "linecache", "locale", "logging", "lzma", "mailbox", "mako",
-      "markdown_it", "markupsafe", "marshal", "match", "math", "mcp", "mcp_types", "mdurl",
-      "migrations", "mimetypes", "mmap", "modulefinder", "msgpack", "msvcrt", "multipart",
-      "multiprocessing", "netrc", "nonlocal", "not", "nt", "ntpath", "nturl2path", "numbers",
-      "opcode", "openapi_pydantic", "opentelemetry", "operator", "optparse", "or", "orjson", "os",
-      "packageurl", "packaging", "packaging_legacy_version", "pass", "pathable", "pathlib",
-      "pathspec", "pdb", "pickle", "pickletools", "pip", "pip_api", "pip_audit",
-      "pip_requirements_parser", "pkgutil", "platform", "platformdirs", "plistlib", "pluggy",
-      "plumbum", "poplib", "posix", "posixpath", "pprint", "profile", "prometheus_client",
-      "prompt_toolkit", "proxytypes", "pstats", "pty", "pwd", "py", "py_compile", "py_serializable",
-      "pyclbr", "pycparser", "pydantic", "pydantic_core", "pydantic_settings", "pydoc", "pydoc_data",
-      "pyexpat", "pygments", "pyparsing", "pyperclip", "pytest", "pytest_asyncio",
-      "python_multipart", "pythoncom", "pywintypes", "questionary", "queue", "quopri", "raise",
-      "random", "re", "readline", "redis", "referencing", "reprlib", "requests", "resource",
-      "return", "rich", "rich_rst", "rlcompleter", "rpds", "ruff", "runpy", "sched", "secrets",
-      "select", "selectors", "shelve", "shlex", "shutil", "signal", "site", "smtplib", "sniffio",
-      "socket", "socketserver", "sortedcontainers", "sqlalchemy", "sqlite3", "src", "sre_compile",
-      "sre_constants", "sre_parse", "sse_starlette", "ssl", "starlette", "stat", "statistics",
-      "stevedore", "string", "stringprep", "struct", "subprocess", "symtable", "sys", "sysconfig",
-      "syslog", "tabnanny", "tarfile", "tempfile", "tenacity", "termios", "tests", "textwrap",
-      "this", "threading", "time", "timeit", "tkinter", "token", "tokenize", "tomli", "tomli_w",
-      "tomllib", "trace", "traceback", "tracemalloc", "trove_classifiers", "truststore", "try",
-      "tty", "turtle", "turtledemo", "type", "typer", "types", "typing", "typing_extensions",
-      "typing_inspection", "uncalled_for", "unicodedata", "unittest", "urllib", "urllib3", "uuid",
-      "uvicorn", "uvloop", "venv", "warnings", "watchfiles", "wave", "wcwidth", "weakref",
-      "webbrowser", "websockets", "while", "win32api", "win32com", "winreg", "winsound", "with",
-      "wsgiref", "xml", "xmlrpc", "yaml", "yield", "zipapp", "zipfile", "zipimport", "zlib",
-      "zoneinfo"
-    ] %}
-    {% if not (package_name | regex_search('^[a-z][a-z0-9_]*\Z')) or package_name|length > 64 or package_name in reserved_modules %}
-    Choose a valid non-reserved lowercase Python package name (up to 64 characters).
-    {% endif %}
-description:
-  type: str
-  default: Async Python service
-author_name:
-  type: str
-  default: Your Name
-project_license:
-  type: str
-  help: Choose the generated project's license explicitly; the template license is separate.
-  choices: [MIT, none]
-use_http_api:
-  type: bool
-  default: true
-http_framework:
-  type: str
-  choices: [fastapi]
-  default: fastapi
-  when: "{{ use_http_api }}"
-use_mcp:
-  type: bool
-  default: false
-  validator: >-
-    {% if not use_http_api and not use_mcp %}Enable at least one interface: HTTP API or MCP.{% endif %}
-mcp_transport:
-  type: str
-  choices: [http, stdio]
-  default: http
-  when: "{{ use_mcp and not use_http_api }}"
-database:
-  type: str
-  choices: [none, postgresql, sqlite, mysql]
-  default: none
-use_alembic:
-  type: bool
-  default: false
-  when: "{{ database != 'none' }}"
-use_settings:
-  type: bool
-  default: true
-use_http_client:
-  type: bool
-  default: false
-  validator: >-
-    {% if not use_http_api and not use_mcp %}Enable at least one interface: HTTP API or MCP.
-    {% elif http_framework != 'fastapi' %}Only fastapi is supported.
-    {% elif use_http_api and use_mcp and mcp_transport != 'http' %}Combined HTTP API and MCP require mcp_transport=http.
-    {% elif database == 'none' and use_alembic %}Alembic requires a SQL database.
+    Выберите имя каталога, не совпадающее с поддерживаемой зависимостью.
+    {% elif not use_http_api and not use_mcp %}Включите хотя бы один интерфейс — HTTP API или MCP.
+    {% elif http_framework != 'fastapi' %}Поддерживается только FastAPI.
+    {% elif use_http_api and use_mcp and mcp_transport != 'http' %}Совместные HTTP API и MCP требуют транспорта http.
+    {% elif database == 'none' and use_alembic %}Alembic требует SQL-БД.
     {% endif %}

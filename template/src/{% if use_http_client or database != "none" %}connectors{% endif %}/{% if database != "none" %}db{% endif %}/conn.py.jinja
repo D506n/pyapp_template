@@ -1,4 +1,4 @@
-"""Async SQL resources; creation never opens a connection or creates a schema."""
+"""Асинхронные ресурсы SQL без подключения и создания схемы при инициализации."""
 
 from sqlalchemy import URL, make_url
 from sqlalchemy.exc import ArgumentError
@@ -8,11 +8,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase
-
-
-class Base(DeclarativeBase):
-    """Empty metadata; add application models explicitly."""
 
 
 def database_url(value: str) -> URL:
@@ -25,9 +20,9 @@ def database_url(value: str) -> URL:
         valid = valid and bool(url.database)
 {% endif %}
     except ValueError, TypeError, ArgumentError:
-        raise ValueError("Invalid DATABASE_URL for the selected async database driver") from None
+        raise ValueError("Недопустимый DATABASE_URL для выбранного асинхронного драйвера") from None
     if not valid:
-        raise ValueError("DATABASE_URL must use {{ {'postgresql': 'postgresql+asyncpg', 'sqlite': 'sqlite+aiosqlite', 'mysql': 'mysql+asyncmy'}[database] }} with a database")
+        raise ValueError("DATABASE_URL должен использовать {{ {'postgresql': 'postgresql+asyncpg', 'sqlite': 'sqlite+aiosqlite', 'mysql': 'mysql+asyncmy'}[database] }} с именем базы")
     return url
 
 

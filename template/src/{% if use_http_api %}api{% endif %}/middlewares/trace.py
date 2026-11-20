@@ -1,19 +1,12 @@
-"""Request-local incoming trace ID; never generated, validated or returned as a header."""
-
-from contextvars import ContextVar
+"""Изоляция входного X-Trace-ID в контексте запроса."""
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-_trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
-
-
-def get_trace_id() -> str | None:
-    """Return the first incoming X-Trace-ID, or None outside a traced HTTP request."""
-    return _trace_id.get()
+from src.context import _trace_id
 
 
 class TraceIDMiddleware:
-    """Scope X-Trace-ID to each HTTP request, including mounted applications."""
+    """Изолировать X-Trace-ID запроса, включая смонтированные приложения."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app

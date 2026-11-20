@@ -7,16 +7,17 @@ import os
 import pytest
 {% if use_http_api %}
 import httpx
-from {{ package_name }}.app import app
+from main import app
 {% endif %}
-from {{ package_name }}.config import Settings
-from {{ package_name }}.resources import resources
+from src.env import Settings
+from config import resources
 
 
 def resource_value(state: Any, name: str) -> Any:
     return state[name] if isinstance(state, Mapping) else getattr(state, name)
 
 
+{% if settings_backend != "magutils" %}
 def test_settings_read_environment_at_creation(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOST", "127.0.0.2")
     monkeypatch.setenv("PORT", "18081")
@@ -27,6 +28,7 @@ def test_settings_read_environment_at_creation(monkeypatch: pytest.MonkeyPatch) 
     assert first.port == 18081
     assert second.port == 18082
 
+{% endif %}
 
 @pytest.mark.asyncio
 async def test_resources_close_on_success_and_error() -> None:
@@ -35,6 +37,7 @@ async def test_resources_close_on_success_and_error() -> None:
         try:
             async with resources() as current:
                 state = current
+                assert isinstance(state, dict)
                 assert resource_value(state, "settings") is not None
 {% if database != 'none' %}
                 assert resource_value(state, "engine") is not None

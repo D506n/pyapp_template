@@ -1,0 +1,59 @@
+"""Запуск самостоятельного сервиса из корня проекта."""
+
+import logging
+{% if use_http_api or mcp_transport == 'http' %}
+
+import uvicorn
+{% endif %}
+{% if use_http_api %}
+from fastapi import FastAPI
+
+from config import lifespan
+from src.api.middlewares.trace import TraceIDMiddleware
+from src.api.v1.root import router
+{% endif %}
+{% if use_http_api or mcp_transport == 'http' %}
+{% if not use_http_api %}
+
+{% endif %}
+from src.env import Settings
+{% endif %}
+{% if use_mcp %}
+{% if not use_http_api and mcp_transport != 'http' %}
+
+{% endif %}
+from src.mcp.server import mcp
+{% endif %}
+{% if use_mcp and (use_http_api or mcp_transport == 'http') %}
+
+mcp_app = mcp.http_app(path="{{ '/' if use_http_api else '/mcp' }}")
+{% endif %}
+{% if use_http_api %}
+
+app = FastAPI(
+    title={{ project_name | tojson }},
+    lifespan=lifespan,
+)
+app.add_middleware(TraceIDMiddleware)
+app.include_router(router)
+{% if use_mcp %}
+app.state.mcp_app = mcp_app
+app.mount("/mcp", mcp_app)
+{% endif %}
+{% elif mcp_transport == 'http' %}
+app = mcp_app
+{% endif %}
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+{% if use_http_api or mcp_transport == 'http' %}
+    settings = Settings()
+    uvicorn.run(app, host=settings.host, port=settings.port)
+{% else %}
+    mcp.run(transport="stdio", show_banner=False)
+{% endif %}
+
+
+if __name__ == "__main__":
+    main()

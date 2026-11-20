@@ -11,14 +11,14 @@ import unittest
 from copier import run_copy
 
 SOURCE = Path(__file__).resolve().parents[1]
-BASE = dict(project_name="contract-service", package_name="contract_service", description="Contract service", author_name="Contract Author", project_license="MIT", use_http_api=True, http_framework="fastapi", use_mcp=False, mcp_transport="http", database="none", use_alembic=False, use_settings=True, use_http_client=False)
+BASE = dict(description="Contract service", author_name="Contract Author", project_license="MIT", use_http_api=True, http_framework="fastapi", use_mcp=False, mcp_transport="http", database="none", use_alembic=False, settings_backend="getenv", use_magutils=False, use_http_client=False)
 DRIVERS = {"postgresql": "asyncpg", "sqlite": "aiosqlite", "mysql": "asyncmy"}
 
 
 def render(destination: Path, **answers: object) -> None:
     data = BASE | answers
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-        run_copy(str(SOURCE), str(destination), data=data, defaults=True, vcs_ref="HEAD", quiet=True)
+        run_copy(str(SOURCE), str(destination), data=data, defaults=True, vcs_ref="HEAD", unsafe=True, quiet=True)
 
 
 class GeneratorContract(unittest.TestCase):
@@ -28,7 +28,7 @@ class GeneratorContract(unittest.TestCase):
         for http, mcp, transport, db, alembic, settings, client, license_name in cases:
             with self.subTest(http=http, mcp=mcp, transport=transport, db=db, alembic=alembic), tempfile.TemporaryDirectory() as tmp:
                 dest = Path(tmp) / "out"
-                render(dest, use_http_api=http, use_mcp=mcp, mcp_transport=transport, database=db, use_alembic=alembic, use_settings=settings, use_http_client=client, project_license=license_name)
+                render(dest, use_http_api=http, use_mcp=mcp, mcp_transport=transport, database=db, use_alembic=alembic, settings_backend="pydantic_settings" if settings else "getenv", use_http_client=client, project_license=license_name)
                 metadata = tomllib.loads((dest / "pyproject.toml").read_text())
                 names = {re.split(r"[\[<>=!~ ;]", dep)[0].lower().replace("_", "-") for dep in metadata["project"]["dependencies"]}
                 for dep, expected in {"fastapi": http, "uvicorn": http or (mcp and transport == "http"), "fastmcp": mcp, "sqlalchemy": db != "none", "alembic": alembic, "pydantic-settings": settings, "httpx": client}.items():
@@ -38,7 +38,7 @@ class GeneratorContract(unittest.TestCase):
                 self.assertTrue({"copier", "redis", "psycopg", "pymysql", "loguru"}.isdisjoint(names))
                 self.assertIn("3.14", metadata["project"]["requires-python"])
                 paths = {str(path.relative_to(dest)) for path in dest.rglob("*")}
-                for forbidden in ("uv.lock", ".venv", ".git", "Dockerfile", ".github", ".gitlab-ci.yml", "routers", "src/env.py", "src/models"):
+                for forbidden in ("uv.lock", ".venv", ".git", "Dockerfile", ".github", ".gitlab-ci.yml", "routers", "src/models", "src/out"):
                     self.assertNotIn(forbidden, paths)
                 self.assertEqual("migrations" in paths, alembic)
                 self.assertEqual("LICENSE" in paths, license_name == "MIT")
@@ -50,7 +50,14 @@ class GeneratorContract(unittest.TestCase):
                 readme = (dest / "README.md").read_text()
                 self.assertIn("uv lock", readme)
                 self.assertIn("uv sync --locked", readme)
-                self.assertIn("contract_service", readme)
+                self.assertEqual(metadata["project"]["name"], "out")
+                self.assertFalse(metadata["tool"]["uv"]["package"])
+                self.assertNotIn("build-system", metadata)
+                self.assertNotIn("scripts", metadata["project"])
+                for required in ("main.py", "config.py", "src/env.py"):
+                    self.assertIn(required, paths)
+                for path, enabled in {"src/api/v1/health.py": http, "src/mcp/tools/ping.py": mcp, "src/connectors/db/conn.py": db != "none", "src/connectors/http.py": client}.items():
+                    self.assertEqual(path in paths, enabled)
 
     def test_free_text_round_trip(self) -> None:
         value = 'Кавычки " и \' \\ newline\nemoji 😀\n$(touch NEVER_EXECUTE)'
@@ -63,34 +70,16 @@ class GeneratorContract(unittest.TestCase):
             self.assertFalse((dest / "NEVER_EXECUTE").exists())
 
     def test_reject_bad_names(self) -> None:
-        for field in ("project_name", "package_name"):
-            for value in ("../escape", "/tmp/escape", "a/b", "a\\b", "", 'bad"name', "bad\nname"):
-                with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as tmp:
-                    with self.assertRaises(Exception):
-                        render(Path(tmp) / "out", **{field: value})
-        for value in ("os", "json", "asyncio", "logging", "fastapi", "httpx", "sqlalchemy", "pydantic", "pytest", "class", "123bad", "a-b"):
-            with self.subTest(package=value), tempfile.TemporaryDirectory() as tmp:
+        for value in ('bad"name', 'bad\nname', 'bad\\name', '123bad', 'тест', 'bad--name', 'bad_name', 'fastapi', 'magutils', 'pydantic-settings', 'a' * 65):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
                 with self.assertRaises(Exception):
-                    render(Path(tmp) / "out", package_name=value)
-
-    def test_distribution_and_selected_import_collisions(self) -> None:
-        cases = [
-            dict(project_name="fastapi", package_name="service_app", use_http_api=True),
-            dict(package_name="pydantic_core", use_settings=True),
-            dict(package_name="greenlet", database="sqlite"),
-            dict(project_name="valid-service\n"),
-            dict(package_name="valid_service\n"),
-        ]
-        for answers in cases:
-            with self.subTest(answers=answers), tempfile.TemporaryDirectory() as tmp:
-                dest = Path(tmp) / "out"
-                with self.assertRaises(ValueError):
-                    render(dest, **answers)
-                for artifact in ("uv.lock", ".venv", ".git"):
-                    self.assertFalse((dest / artifact).exists())
+                    render(Path(tmp) / value)
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(Exception):
+                render(Path(tmp) / "out", project_name="different")
 
     def test_invalid_answers(self) -> None:
-        for answers in (dict(use_http_api=False, use_mcp=False), dict(use_http_api=True, use_mcp=True, mcp_transport="stdio"), dict(database="oracle"), dict(project_license="Apache-2.0"), dict(http_framework="django"), dict(use_http_api=False, use_mcp=True, mcp_transport="udp")):
+        for answers in (dict(use_http_api=False, use_mcp=False), dict(use_http_api=True, use_mcp=True, mcp_transport="stdio"), dict(database="oracle"), dict(project_license="Apache-2.0"), dict(http_framework="django"), dict(settings_backend="unknown"), dict(use_http_api=False, use_mcp=True, mcp_transport="udp")):
             with self.subTest(answers=answers), tempfile.TemporaryDirectory() as tmp:
                 with self.assertRaises(Exception):
                     render(Path(tmp) / "out", **answers)
@@ -112,4 +101,4 @@ class GeneratorContract(unittest.TestCase):
             del data["project_license"]
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(Exception):
-                    run_copy(str(SOURCE), str(Path(tmp) / "out"), data=data, defaults=True, vcs_ref="HEAD", quiet=True)
+                    run_copy(str(SOURCE), str(Path(tmp) / "out"), data=data, defaults=True, vcs_ref="HEAD", unsafe=True, quiet=True)
