@@ -4,7 +4,8 @@ import os
 import pytest
 from sqlalchemy import text
 
-from {{ package_name }}.database import Base, create_engine, database_url, session_factory
+from src.connectors.db.conn import create_engine, database_url, session_factory
+from src.connectors.db.tables import Base
 
 
 def test_metadata_starts_empty() -> None:

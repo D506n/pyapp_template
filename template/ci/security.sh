@@ -2,7 +2,7 @@
 set -euo pipefail
 mkdir -p data
 rm -f data/bandit-report.json data/bandit-report-short.json
-paths=(src ci)
+paths=(main.py config.py src ci)
 if [[ -d migrations ]]; then paths+=(migrations); fi
 bandit_code=0
 uv run --locked bandit -r "${paths[@]}" -f json -o data/bandit-report.json || bandit_code=$?

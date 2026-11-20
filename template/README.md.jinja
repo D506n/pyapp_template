@@ -2,48 +2,57 @@
 
 {{ description | e }}
 
-Python 3.14; uv manages dependencies. Author: {{ author_name | e }}.
+Python 3.14; зависимости управляются через uv. Автор: {{ author_name | e }}.
 {% if project_license == 'MIT' %}
-Licensed under MIT; see LICENSE.
+Проект распространяется по лицензии MIT; см. LICENSE.
 {% else %}
-No project license selected. No license grant is provided; choose a license before distribution.
+Лицензия проекта не выбрана, разрешение на использование кода не предоставлено.
+Перед распространением проекта выберите лицензию.
 {% endif %}
 
-## Bootstrap and run
+## Подготовка окружения и запуск
 
-Generation has not installed dependencies, created a lockfile, contacted a database,
-or initialized Git. Run explicitly:
+Установка выполняется только при ответе «Да» на последний вопрос Copier. По умолчанию
+создаются только файлы. Для согласованной установки используйте `copier copy --trust --no-cleanup`; `--skip-tasks` отключает установку даже при сохранённом согласии.
+Для API при установке задайте `cleanup_on_error=False`. При ошибке `uv sync` команда
+завершается неуспешно, а файлы остаются для исправления и ручного продолжения.
+На update и pretend установка не выполняется. Git и миграции не запускаются.
+
+Если установка пропущена, подготовьте окружение явно:
 
 ```sh
 uv lock
 uv sync --locked
 {% if database != 'none' %}
-# Set DATABASE_URL for your selected environment before starting (see below).
+# Перед запуском задайте DATABASE_URL для выбранного окружения (см. ниже).
 {% endif %}
-uv run python -m {{ package_name }}
+uv run main.py
 ```
 
-The equivalent console entry point is `uv run {{ project_name }}`. Keep and review
-`uv.lock`; subsequent installations use `uv sync --locked`.
+Проект не собирается и не устанавливается как Python-пакет: `[tool.uv] package=false`.
+Точка запуска — `main.py` в корне. Сохраняйте и проверяйте `uv.lock`; для последующих
+установок используйте `uv sync --locked`. Работайте из корня проекта.
+
 {% if use_http_api or mcp_transport == 'http' %}
-`HOST` defaults to `127.0.0.1`, `PORT` to `8000`. ASGI entry point:
-`{{ package_name }}.app:app`. Set environment variables explicitly to override them.
+Значения по умолчанию: `HOST=127.0.0.1`, `PORT=8000`. Точка входа ASGI:
+`main:app`. Для изменения настроек явно задайте переменные окружения.
 {% endif %}
 {% if use_http_api %}
 
 ## HTTP API
 
-The pure ASGI middleware stores incoming `X-Trace-ID` in a request-local `ContextVar`.
-Read it with `{{ package_name }}.trace.get_trace_id() -> str | None`.
-Header names are case-insensitive. The first value is preserved as decoded by ASGI
-(including an empty string); absent means `None`. No ID is generated or validated,
-and no response header is added. The context resets in `finally` after normal,
-failed or cancelled requests, and also covers mounted MCP in a combined application.
-Do not treat unvalidated incoming trace IDs as trusted data when logging or displaying.
+ASGI-middleware сохраняет входной `X-Trace-ID` в `ContextVar` текущего запроса.
+Прочитать значение можно через `src.context.get_trace_id() -> str | None`.
+Регистр имени заголовка не учитывается. Сохраняется первое значение в декодированном
+ASGI виде, включая пустую строку; при отсутствии заголовка возвращается `None`.
+ID не генерируется и не проверяется, заголовок ответа не добавляется. Контекст
+сбрасывается в `finally` после успешного запроса, ошибки или отмены. Middleware
+также охватывает смонтированный MCP в совместном приложении. При журналировании
+или отображении считайте входной trace-id непроверенными данными.
 
-
-`GET /health` returns HTTP 200 with `{"status":"ok"}`. It is a liveness check,
-not a database or external dependency readiness check. FastAPI exposes `/docs`.
+`GET /health` возвращает HTTP 200 с `{"status":"ok"}`. Это проверка работы
+приложения, а не готовности БД или внешних зависимостей. Документация FastAPI
+доступна по `/docs`.
 
 ```sh
 curl http://127.0.0.1:8000/health
@@ -53,27 +62,29 @@ curl http://127.0.0.1:8000/health
 
 ## MCP
 
-Transport: **{{ 'http' if use_http_api else mcp_transport }}**.
-Tool `ping` takes an empty argument object `{}` and returns the string `pong`.
-It performs no external actions. MCP clients initialize the connection, list tools,
-then call `ping`; invalid arguments are reported as protocol/tool errors.
+Транспорт: **{{ 'http' if use_http_api else mcp_transport }}**.
+Инструмент `ping` принимает пустой объект аргументов `{}` и возвращает строку `pong`.
+Внешние действия не выполняются. MCP-клиент инициализирует соединение, получает
+список инструментов и вызывает `ping`; неверные аргументы приводят к ошибке
+протокола или инструмента.
 {% if use_http_api or mcp_transport == 'http' %}
-Connect a Streamable HTTP MCP client to `http://127.0.0.1:8000/mcp{{ '/' if use_http_api else '' }}`.
+Подключите MCP-клиент с поддержкой Streamable HTTP к `http://127.0.0.1:8000/mcp{{ '/' if use_http_api else '' }}`.
 {% if use_http_api %}
-The FastAPI lifespan starts and stops the mounted MCP service; `/mcp` may redirect to `/mcp/`.
+Lifespan FastAPI запускает и останавливает смонтированный MCP-сервис;
+`/mcp` может перенаправлять на `/mcp/`.
 {% endif %}
 {% else %}
-Configure the client to execute `uv run python -m {{ package_name }}` from this
-project directory. Stdout is reserved for MCP protocol messages; logs use stderr.
-Stop via the client's normal shutdown/EOF sequence.
+Настройте клиент на выполнение `uv run main.py` из каталога
+проекта. Stdout используется только для сообщений протокола MCP, журналы выводятся
+в stderr. Завершайте процесс штатной последовательностью остановки клиента или EOF.
 {% endif %}
 {% endif %}
 {% if database != 'none' %}
 
-## Async database
+## Асинхронная работа с БД
 
-Selected database: **{{ database }}**. Set `DATABASE_URL` in the process environment.
-Examples below are placeholders, never real credentials:
+Выбранная БД: **{{ database }}**. Задайте `DATABASE_URL` в окружении процесса.
+Ниже приведены примеры с заполнителями, а не реальные учётные данные:
 
 ```text
 {% if database == 'postgresql' %}
@@ -85,21 +96,22 @@ sqlite+aiosqlite:///./app.db
 {% endif %}
 ```
 
-`{{ package_name }}.database.database_url(value)` validates the selected async driver
-and database; missing or incompatible URLs raise a redacted `ValueError`.
-`create_engine(value)` creates an async engine without connecting.
-`session_factory(engine)` returns an `async_sessionmaker` with `expire_on_commit=False`.
-Use `async with session_factory(engine)() as session` and an explicit transaction
-(`async with session.begin()`) for writes. Connections exist only while used.
-Dispose engines you create with `await engine.dispose()` in a `finally` block.
-The service lifespan owns and disposes its own engine. No models, tables, CRUD or
-schema creation are supplied; `Base.metadata` is initially empty.
+`src.connectors.db.conn.database_url(value)` проверяет соответствие выбранным
+асинхронному драйверу и БД. Отсутствующий или несовместимый URL вызывает `ValueError`
+без раскрытия учётных данных.
+`create_engine(value)` создаёт асинхронный engine без подключения к БД.
+`session_factory(engine)` возвращает `async_sessionmaker` с `expire_on_commit=False`.
+Используйте `async with session_factory(engine)() as session`, а для записи — явную
+транзакцию `async with session.begin()`. Соединения занимаются только на время работы.
+Созданные вами engine освобождайте через `await engine.dispose()` в блоке `finally`.
+Lifespan сервиса управляет собственным engine и освобождает его. Модели, таблицы,
+CRUD и создание схемы не добавлены; `src.connectors.db.tables.Base.metadata` изначально пусты.
 {% if use_alembic %}
 
-### Explicit migrations
+### Явное выполнение миграций
 
-Review the environment and DATABASE_URL before each command. Import application
-models in `migrations/env.py` when you add them so autogenerate can see their metadata.
+Перед каждой командой проверяйте окружение и DATABASE_URL. После добавления моделей
+приложения импортируйте их в `migrations/env.py`, чтобы автогенерация видела метаданные.
 
 ```sh
 uv run alembic revision --autogenerate -m "describe change"
@@ -107,57 +119,102 @@ uv run --locked ruff check --select I --fix migrations
 just format-src
 uv run --locked ruff check migrations
 uv run --locked ruff format --check migrations
-# Review the generated revision; agree on any missing transformation before applying it.
+# Просмотрите ревизию; согласуйте недостающие преобразования перед её применением.
 uv run alembic upgrade head
 ```
 
-After generating or editing a revision, sort its imports and run `just format-src`
-as shown above before checks or applying it. Alembic emits Python source that may
-need formatting, including quote normalization. Inspect these mechanical changes
-and the migration operations; formatting does not establish migration correctness.
+После генерации или редактирования ревизии отсортируйте импорты и выполните
+`just format-src`, как показано выше, до проверок или применения миграции.
+Созданному Alembic Python-коду может потребоваться форматирование, в том числе
+нормализация кавычек. Просматривайте и механические изменения, и операции миграции:
+форматирование не подтверждает корректность преобразования данных.
 
-Migrations use the selected async driver and run only on explicit command. Offline
-mode is unsupported. Never call `create_all` as a substitute for migration history.
+Миграции используют выбранный асинхронный драйвер и выполняются только по явной
+команде. Режим без подключения к БД (offline) не поддерживается. Не заменяйте историю
+миграций вызовом `create_all`.
 {% if database == 'sqlite' %}
-SQLite migrations enable batch rendering for table alterations; review generated
-batch operations, database file location and backup requirements before applying.
+Для изменения таблиц SQLite включена генерация пакетных операций (batch).
+Перед применением проверяйте эти операции, расположение файла БД и требования
+к резервной копии.
 {% endif %}
 {% endif %}
 {% endif %}
 
-## Configuration and resources
+## Настройки и ресурсы
 
-{% if use_settings %}
-`Settings` uses typed pydantic-settings environment fields. No `.env` is loaded
-implicitly; invalid values raise validation errors with input values hidden.
+Публичный `src.env.Settings()` предоставляет `host`, `port`{% if database != 'none' %} и `database_url`{% endif %}.
+{% if settings_backend == 'pydantic_settings' %}
+Используется `pydantic_settings` с типизированными полями окружения. `.env` не загружается
+неявно; ошибки валидации скрывают исходные значения.
+{% elif settings_backend == 'magutils' %}
+Используется настоящий `magutils.env.environ(env_path=os.devnull)`: поиска `.env` нет.
+Библиотека кеширует первый успешно созданный набор настроек (singleton); последующие
+`Settings()` используют этот снимок, а не перечитывают изменённое окружение. Пустые
+значения native `magutils.env` считает отсутствующими и заменяет значениями по умолчанию.
+Ошибка чтения адаптируется к `ValueError` без исходных значений. Не выводите внутренний
+native объект в журнал: он может содержать секретные поля.
 {% else %}
-`Settings` reads environment variables using the standard library; pydantic-settings
-is not a direct runtime dependency. No `.env` loader is used.
+Используется `os.getenv(...)` без внешних зависимостей для настроек и без загрузчика
+`.env`. Каждый `Settings()` читает текущее окружение; неверный PORT вызывает `ValueError`
+без исходного значения.
+{% endif %}
+{% if settings_backend == 'magutils' or use_magutils %}
+`magutils` подключён только из официального `https://github.com/D506n/magutils`,
+commit `c54820bb9d782c70c6f6be52bf28860e48bfb4fb` зафиксирован в `[tool.uv.sources]`.
+{% if settings_backend != 'magutils' %}
+Дополнительная библиотека не меняет выбранный способ чтения настроек и сама по себе
+не включает её другие возможности.
+{% endif %}
 {% endif %}
 {% if use_http_client %}
-The lifespan opens an `httpx.AsyncClient` with a 10-second timeout and closes it
-on shutdown, including failure paths. `resources()` yields it as `state["http_client"]`.
+Lifespan открывает `httpx.AsyncClient` с таймаутом 10 секунд и закрывает его при
+завершении, в том числе при ошибке. `resources()` передаёт клиент как `state["http_client"]`.
 {% endif %}
-`{{ package_name }}.resources.resources()` is an async context manager yielding the
-selected resource dictionary. Do not hold SQL transactions during external requests.
-Application logs use standard `logging`; do not log credentials or DATABASE_URL.
+`config.resources()` — асинхронный контекстный менеджер,
+предоставляющий словарь выбранных ресурсов. Не удерживайте SQL-транзакции во время
+внешних запросов. Для журналирования используется стандартный `logging`;
+не записывайте в журналы учётные данные или DATABASE_URL.
 {% if use_mcp %}
-The MCP lifespan owns resources; retrieve its state via FastMCP's lifespan context.
+Ресурсами управляет lifespan MCP; его состояние доступно через lifespan-контекст FastMCP.
 {% elif use_http_api %}
-HTTP handlers can access lifespan resources through `request.app.state.resources`.
+HTTP-обработчики получают ресурсы lifespan через `request.app.state.resources`.
 {% endif %}
 
-## Checks
+## Структура
+
+`main.py` запускает сервис, `config.py` управляет ресурсами и lifespan,
+`src/env.py` читает настройки. Создаются только выбранные компоненты:
+{% if use_http_api %}
+- `src/context.py`, `src/api/middlewares/trace.py` — контекст запроса;
+- `src/api/v1/root.py` и `health.py` — HTTP-маршруты без изменения `/health`.
+{% endif %}
+{% if use_mcp %}
+- `src/mcp/server.py` и `src/mcp/tools/ping.py` — MCP-сервер и инструмент.
+{% endif %}
+{% if use_http_client %}
+- `src/connectors/http.py:create_client()` — HTTP-клиент с явным закрытием владельцем.
+{% endif %}
+{% if database != 'none' %}
+- `src/connectors/db/conn.py` и `tables.py` — соединения и пустая база моделей.
+{% endif %}
+
+## Проверки
 
 ```sh
 just precommit-check-agent
 ```
 
-pytest supports async tests; Ruff excludes tests but checks application and migration
-Python. Bandit and pip-audit are included. HTTPX is also a development dependency for
-transport checks, independently of the optional runtime client. No CI, Docker,
-authentication, deployment, or automatic migrations are configured.
+pytest поддерживает асинхронные тесты. Ruff не проверяет тесты, но проверяет
+Python-код приложения и миграций. В набор проверок включены Bandit и pip-audit.
+HTTPX также входит в зависимости разработки для проверки транспортов независимо
+от выбора HTTP-клиента приложения. CI, Docker, аутентификация, развёртывание
+и автоматическое применение миграций не настроены.
 
-The original template MIT notice is retained in `THIRD_PARTY_NOTICES.md` in generated
-projects, including when the project license is `none`. This does not license newly
-added project code automatically.
+Исходное уведомление о лицензии MIT шаблона сохраняется в
+`THIRD_PARTY_NOTICES.md` создаваемого проекта, в том числе при выборе `none`.
+Оно не распространяет лицензию автоматически на добавленный вами код.
+
+При `copier update` имя проекта берётся из сохранённых ответов, включая внутренние
+временные каталоги Copier. Вопрос имени не появляется. Обновление не запускает
+`uv sync`, даже если сохранён ответ `install_dependencies=true`; для update флаг
+`--no-cleanup` не требуется. Не редактируйте сохранённое имя проекта вручную.

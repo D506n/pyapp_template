@@ -11,6 +11,9 @@ license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 license-files = ["THIRD_PARTY_NOTICES.md"]
 {% endif %}
 dependencies = [
+{% if settings_backend == "magutils" or use_magutils %}
+    "magutils",
+{% endif %}
 {% if use_http_api %}
     "fastapi>=0.121,<1",
 {% endif %}
@@ -33,7 +36,7 @@ dependencies = [
     "alembic>=1.17,<2",
 {% endif %}
 {% endif %}
-{% if use_settings %}
+{% if settings_backend == 'pydantic_settings' %}
     "pydantic-settings>=2.11,<3",
 {% endif %}
 {% if use_http_client %}
@@ -41,15 +44,13 @@ dependencies = [
 {% endif %}
 ]
 
-[project.scripts]
-{{ project_name }} = "{{ package_name }}.__main__:main"
+[tool.uv]
+package = false
+{% if settings_backend == 'magutils' or use_magutils %}
 
-[build-system]
-requires = ["hatchling>=1.27,<2"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/{{ package_name }}"]
+[tool.uv.sources]
+magutils = { git = "https://github.com/D506n/magutils", rev = "c54820bb9d782c70c6f6be52bf28860e48bfb4fb" }
+{% endif %}
 
 [dependency-groups]
 dev = [

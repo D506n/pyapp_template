@@ -1,79 +1,107 @@
 # pyapp_template
 
-Copier generator for Python 3.14 async services, managed with uv. Choose FastAPI,
-FastMCP (HTTP or stdio), optional SQLAlchemy asyncio/Alembic, typed settings and
-an outbound HTTP client. Generated projects contain no CI, Docker, authentication,
-Redis, business models, or deployment machinery.
+Copier-шаблон асинхронных сервисов на Python 3.14 с управлением зависимостями через
+uv. При создании проекта можно выбрать FastAPI, FastMCP (HTTP или stdio),
+SQLAlchemy asyncio и Alembic, типизированные настройки и HTTP-клиент для исходящих
+запросов. CI, Docker, аутентификация, Redis, предметные модели и средства
+развёртывания в создаваемый проект не входят.
 
-## Generate
+## Создание проекта
 
-Install Python 3.14 and uv, then run:
+Установите Python 3.14 и uv, затем выполните:
 
 ```sh
-uvx --from 'copier>=9.11,<10' copier copy gh:D506n/pyapp_template my-service
+uvx --from 'copier>=9.19.1,<10' copier copy --trust --no-cleanup gh:D506n/pyapp_template my-service
 ```
 
-Select the generated project's license explicitly: `MIT` or `none`. The generator's
-MIT license does not automatically license your generated application. `none` omits
-the application license file and metadata; choose a license before distributing it.
+Явно выберите лицензию создаваемого проекта: `MIT` или `none`. Лицензия MIT самого
+шаблона не распространяется автоматически на всё созданное приложение. При выборе
+`none` файл и поле лицензии проекта не добавляются; перед распространением
+приложения определите условия лицензирования.
 
-Before this branch is merged, validate a local candidate (HEAD uses its working tree):
+Для проверки локальных изменений шаблона используйте рабочую копию
+(`HEAD` учитывает её незакоммиченные изменения):
 
 ```sh
-uvx --from 'copier>=9.11,<10' copier copy --vcs-ref=HEAD ./path/to/candidate ./my-service
+uvx --from 'copier>=9.19.1,<10' copier copy --trust --no-cleanup --vcs-ref=HEAD ./path/to/candidate ./my-service
 ```
 
-For reproducible noninteractive generation, supply the license and answers explicitly:
+Для создания проекта без интерактивного опроса передайте лицензию и ответы явно:
 
 ```sh
-uvx --from 'copier>=9.11,<10' copier copy --defaults \
-  -d project_name=my-service -d package_name=my_service \
+uvx --from 'copier>=9.19.1,<10' copier copy --trust --no-cleanup --defaults \
   -d project_license=MIT -d use_http_api=true -d use_mcp=false \
   gh:D506n/pyapp_template my-service
 cd my-service
 uv lock
 uv sync --locked
-uv run python -m my_service
+uv run main.py
 ```
 
-Generation writes files only: no install, network bootstrap, Git initialization,
-lockfile generation, secrets or migrations. Remote source retrieval by Copier itself
-requires network. Review generated files before running the separate bootstrap.
-`uv lock` resolves a real `uv.lock`; `uv sync --locked` installs that resolution.
+Последний вопрос «Установить зависимости сейчас?» по умолчанию выключен. Ответ «Да»
+выполняет только `uv sync` в созданном каталоге: создаёт `.venv` и настоящий `uv.lock`,
+устанавливает зависимости приложения и разработки. Для этого нужны `uv`, доступ
+к источникам зависимостей и флаги `--trust --no-cleanup`. Последний флаг сохраняет
+файлы при ошибке установки; API использует `cleanup_on_error=False`. Попытка согласиться
+на установку с включённым удалением файлов отклоняется до генерации.
 
-## Choices and constraints
+`--skip-tasks` запрещает установку даже при `install_dependencies=true`. При отказе,
+использовании defaults, update и pretend установки нет. Без согласия создаются только
+файлы. В случае неуспешного `uv sync` Copier возвращает ошибку, файлы остаются для ручного
+продолжения. Никаких shell-команд из ответов, Git init/commit и автоматических миграций.
+Загрузка удалённого шаблона самим Copier требует сети.
 
-| Question | Values / default |
+Для ручной подготовки выполните `uv lock`, затем `uv sync --locked`.
+Созданный сервис имеет `[tool.uv] package=false`: не собирается в wheel и не
+устанавливает собственный пакет в окружение. Запуск из корня: `uv run main.py`.
+Код разделён по назначению: `config.py`, `src/env.py`, выбранные `src/api/`,
+`src/mcp/` и `src/connectors/`; дополнительного `src/<имя проекта>/` нет.
+
+## Параметры и ограничения
+
+| Параметр | Значения и значение по умолчанию |
 | --- | --- |
-| project_name | lowercase distribution name; `my-service` |
-| package_name | safe lowercase Python package; derived from project name |
-| description, author_name | free text; escaped in metadata |
-| project_license | explicit `MIT` or `none`; no implicit default |
-| use_http_api / http_framework | true / FastAPI |
-| use_mcp | false |
-| mcp_transport | HTTP or stdio for MCP-only; HTTP when combined |
-| database | none (default), postgresql, sqlite, mysql |
-| use_alembic | false; SQL only |
-| use_settings | true; pydantic-settings, no implicit .env |
-| use_http_client | false; httpx AsyncClient with timeout |
+| Имя проекта | из имени каталога назначения, без вопроса: `./test` → `test` |
+| description, author_name | произвольный текст; экранируется в метаданных |
+| project_license | явный выбор `MIT` или `none`; значения по умолчанию нет |
+| use_http_api / http_framework | `true` / FastAPI |
+| use_mcp | `false` |
+| mcp_transport | HTTP или stdio для отдельного MCP; HTTP при совместном использовании с FastAPI |
+| database | `none` по умолчанию; `postgresql`, `sqlite`, `mysql` |
+| use_alembic | `false`; доступен только при выборе SQL-БД |
+| settings_backend | `os.getenv(...) — без внешних зависимостей` по умолчанию; `magutils.env`; `pydantic_settings` |
+| use_magutils | `false`; отдельный вопрос только при backend, отличном от magutils |
+| install_dependencies | `false`; последний вопрос, согласие запускает `uv sync` |
+| use_http_client | `false`; httpx AsyncClient с таймаутом |
 
-At least one interface is required. Invalid names, reserved module names and
-incompatible choices are rejected. Distribution names and import package names are
-reserved against the supported runtime, development and build dependency union, even
-when an option is disabled. These explicit lists must be updated when dependencies
-change; they do not predict names of unknown future dependencies. Combined interfaces share one ASGI service;
-MCP mounts at `/mcp`, allowing the normal redirect to `/mcp/`. FastAPI preserves incoming `X-Trace-ID` in a request-local ContextVar; absent means
-`None`, no ID is generated and no response header is added.
-Bind defaults to
-loopback. MCP stdio writes its protocol to stdout and logs to stderr.
+Нужно включить хотя бы один интерфейс. Имя каталога — до 64 строчных латинских букв,
+цифр и одиночных дефисов, начиная с буквы. Имена поддерживаемых зависимостей и
+противоречащий каталогу `project_name` из data отклоняются. Имя Python-пакета не спрашивается.
+Явный список зарезервированных зависимостей обновляется вместе с зависимостями;
+неизвестные будущие имена он предсказать не может.
 
-SQL selects only its async driver: asyncpg, aiosqlite or asyncmy. Supply
-`DATABASE_URL` explicitly at runtime; URLs must match the chosen driver. Import and
-startup never connect to the database or create tables. Alembic commands are manual,
-use async connections and empty initial metadata; review each generated revision
-before applying it to an explicitly selected environment.
+При выборе `magutils.env` библиотека подключается обязательно, без повторного вопроса.
+При других backend вопрос «Добавить magutils?» не меняет выбранный backend. Источник —
+официальный `https://github.com/D506n/magutils`, pinned commit
+`c54820bb9d782c70c6f6be52bf28860e48bfb4fb`, не одноимённый пакет PyPI.
+`environ(env_path=os.devnull)` отключает поиск `.env`; native singleton кеширует первый
+снимок окружения. Другие возможности magutils автоматически не включаются.
 
-## Generator development
+При совместном выборе FastAPI и MCP используется одно ASGI-приложение. MCP
+монтируется на `/mcp`; допускается обычное перенаправление на `/mcp/`. FastAPI
+сохраняет входной `X-Trace-ID` в `ContextVar` текущего запроса; без заголовка
+значение равно `None`. ID не генерируется и не добавляется в заголовки ответа.
+По умолчанию сервис слушает только локальный интерфейс. MCP через stdio использует
+stdout для протокола, а stderr — для журналирования.
+
+Для выбранной SQL-БД добавляется только её асинхронный драйвер: asyncpg, aiosqlite
+или asyncmy. При запуске явно задайте `DATABASE_URL`, соответствующий выбранному
+драйверу. Импорт и запуск приложения не открывают соединение с БД и не создают
+таблицы. Команды Alembic выполняются вручную и используют асинхронные соединения;
+исходные метаданные моделей пусты. Просматривайте каждую созданную ревизию перед
+её применением к явно выбранному окружению.
+
+## Разработка шаблона
 
 ```sh
 uv lock
@@ -81,13 +109,23 @@ uv sync --locked
 just precommit-check-agent
 ```
 
-See AGENTS.md, AGENTS.project.md and CODESTYLE.md. Tests and security checks apply
-to the generator and representative generated applications. The application runtime
-does not depend on Copier. HTTPX in the development group supports transport checks
-and does not enable the optional runtime client.
+Правила работы описаны в AGENTS.md, AGENTS.project.md и CODESTYLE.md. Тесты и
+проверки безопасности выполняются для генератора и представительных вариантов
+созданных приложений. Приложению не нужен Copier во время работы. HTTPX в группе
+зависимостей разработки используется для проверки транспортов и не включает
+необязательный HTTP-клиент приложения.
 
-MIT © D506n. Generated-project licensing is a separate explicit choice.
+MIT © D506n. Лицензия создаваемого проекта выбирается отдельно.
 
-The original template MIT notice is retained in `THIRD_PARTY_NOTICES.md` in generated
-projects, including when the project license is `none`. This does not license newly
-added project code automatically.
+Исходное уведомление о лицензии MIT шаблона сохраняется в
+`THIRD_PARTY_NOTICES.md` создаваемого проекта, в том числе при выборе `none`.
+Оно не распространяет лицензию автоматически на добавленный вами код.
+
+При `copier update` имя проекта берётся из сохранённых ответов, включая внутренние
+временные каталоги Copier. Вопрос имени не появляется. Обновление не запускает
+`uv sync`, даже если сохранён ответ `install_dependencies=true`; для update флаг
+`--no-cleanup` не требуется. Не редактируйте сохранённое имя проекта вручную.
+
+Минимальная поддерживаемая версия Copier — 9.19.1: шаблон использует `ask: false`
+для вычисляемого имени проекта без вопроса пользователю. Эта возможность появилась
+в Copier 9.19.0; версия 9.19.1 проверена при приёмке шаблона.

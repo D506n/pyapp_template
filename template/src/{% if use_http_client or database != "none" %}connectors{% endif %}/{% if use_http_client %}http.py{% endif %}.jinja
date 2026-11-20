@@ -1,0 +1,7 @@
+"""HTTP-клиент с явным таймаутом; владелец закрывает его через async with."""
+
+import httpx
+
+
+def create_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(timeout=httpx.Timeout(10.0))
