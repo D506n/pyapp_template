@@ -10,25 +10,19 @@ from fastapi import FastAPI
 {% if database != 'none' %}
 from src.connectors.db.conn import create_engine, session_factory
 {% endif %}
-{% if use_http_client %}
-from src.connectors.http import create_client
-{% endif %}
 from src.env import Settings
 
 
 @asynccontextmanager
 async def resources() -> AsyncGenerator[dict[str, object]]:
     settings = Settings()
-    async with AsyncExitStack(){% if database != "none" or use_http_client %} as stack{% endif %}:
+    async with AsyncExitStack(){% if database != "none" %} as stack{% endif %}:
         state: dict[str, object] = {"settings": settings}
 {% if database != 'none' %}
         engine = create_engine(settings.database_url)
         stack.push_async_callback(engine.dispose)
         state["engine"] = engine
         state["sessions"] = session_factory(engine)
-{% endif %}
-{% if use_http_client %}
-        state["http_client"] = await stack.enter_async_context(create_client())
 {% endif %}
         yield state
 {% if use_mcp %}

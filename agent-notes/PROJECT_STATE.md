@@ -30,4 +30,16 @@ HTTP/MCP, 3 SQL-драйвера и Alembic, trace lifecycle, все спосо�
 для metadata uv формируется отдельный app-ASCII-slug с fallback app-app.
 Независимо проверены полный интерактивный сценарий new_pyproject с HTTP/MCP,
 PostgreSQL/Alembic, magutils.env и httpx; 15 вариантов имени с uv lock --offline;
-copy/update. Root pytest:12 PASS. Коммита этого исправления пока нет.
+copy/update. Root pytest:12 PASS. Исправление имён опубликовано коммитом 675298f через PR #3.
+
+Новая согласованная задача — только шаблон, существующий пользовательский проект
+не менять. Убран env_path=os.devnull, httpx остаётся только зависимостью.
+При FastAPI добавлены Bearer middleware и DI TraceId/Depends(get_trace_id).
+Документация открыта; остальные маршруты требуют токен. При отсутствии API_TOKEN
+создаётся token_hex(16), сохраняется в .env и используется повторно. Для magutils
+используется native new_token(default_factory). Общая lifecycle-цепочка сохранена.
+Независимая приёмка:13 roottests PASS, три backend bootstrap/auth/DI PASS,
+реальный MCP combined/standalone PASS. Полный root precommit и два generated precommit прошли; итоговое ревью PASS.
+Привязка новых тестов к временному кэшу удалена. Ограничение pip-audit для Git
+magutils сохраняется: пропуск библиотечного аудита не подтверждает безопасность.
+Коммита этой задачи нет.

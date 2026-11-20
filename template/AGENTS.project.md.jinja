@@ -43,13 +43,26 @@
 {% endif %}
 {% endif %}
 - Способ чтения настроек — {% if settings_backend == 'magutils' %}`magutils.env`{% elif settings_backend == 'pydantic_settings' %}`pydantic_settings`{% else %}`os.getenv(...)` без внешних зависимостей{% endif %}; код находится в `src/env.py`.
+{% if settings_backend == 'magutils' %}
+  Используется штатный `@environ()` с поведением поиска `.env` библиотеки.
+{% else %}
   Не выполнять неявный поиск `.env`.
+{% endif %}
 {% if settings_backend == 'magutils' or use_magutils %}
 - `magutils` добавлен по явному выбору. Если для настроек выбран другой механизм,
   наличие библиотеки не меняет этот выбор. Не включать её остальные возможности автоматически.
 {% endif %}
 {% if use_http_client %}
-- Исходящие HTTP-запросы — `httpx.AsyncClient`, с таймаутами и закрытием ресурсов.
+- `httpx` добавлен как зависимость; клиент и его жизненный цикл реализует разработчик сервиса.
+{% endif %}
+
+{% if use_http_api %}
+- Bearer-авторизация: заданный `API_TOKEN` используется без замены; при отсутствии
+  создаётся токен `token_hex(16)` и сохраняется в `.env`. При magutils используется
+  штатная `new_token` как default_factory поля. Не раскрывать токен в сообщениях,
+  repr и логах. Без авторизации доступны только `/docs`,
+  `/docs/oauth2-redirect`, `/redoc` и `/openapi.json`. Остальные маршруты,
+  включая `/health` и смонтированный `/mcp`, требуют правильного токена.
 {% endif %}
 
 ## Зависимости, запуск и проверки

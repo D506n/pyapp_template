@@ -43,24 +43,19 @@ async def test_resources_close_on_success_and_error() -> None:
                 assert resource_value(state, "engine") is not None
                 assert resource_value(state, "sessions") is not None
 {% endif %}
-{% if use_http_client %}
-                assert not resource_value(state, "http_client").is_closed
-                assert resource_value(state, "http_client").timeout.read is not None
-{% endif %}
+                assert "http_client" not in state
                 if fail:
                     raise RuntimeError("synthetic contract error")
         except RuntimeError as error:
             assert str(error) == "synthetic contract error"
-{% if use_http_client %}
-        assert resource_value(state, "http_client").is_closed
-{% endif %}
+
 {% if use_http_api %}
 
 @pytest.mark.asyncio
 async def test_health() -> None:
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.get("/health", headers={"X-Trace-ID": "literal-id"})
+            response = await client.get("/health", headers={"X-Trace-ID": "literal-id", "Authorization": "Bearer synthetic-contract-token"})
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert "x-trace-id" not in response.headers

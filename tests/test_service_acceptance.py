@@ -26,20 +26,25 @@ def execute(dest: Path, code: str, extra: dict | None = None) -> subprocess.Comp
     env = os.environ.copy()
     for key in ("HOST", "PORT", "DATABASE_URL", "PYTHONPATH"):
         env.pop(key, None)
+    env["API_TOKEN"] = "synthetic-contract-token"
     env.update(extra or {})
     # Python -c has the working directory on sys.path; no package or path injection.
     wrapped = "try:\n" + "\n".join("    " + line for line in code.splitlines()) + "\nexcept BaseException as error:\n    print(type(error).__name__)\n    raise SystemExit(1)\n"
-    return subprocess.run([sys.executable, "-c", wrapped], cwd=dest, env=env, text=True, capture_output=True, timeout=60)
+    return subprocess.run([str(dest / ".venv/bin/python") if (dest / ".venv/bin/python").exists() else sys.executable, "-c", wrapped], cwd=dest, env=env, text=True, capture_output=True, timeout=60)
 
 
 class ServiceAcceptance(unittest.TestCase):
-    def test_native_settings_matrix_and_dotenv_ignored(self) -> None:
+    def test_native_settings_matrix_and_dotenv_contract(self) -> None:
         for backend, optional in (("getenv", False), ("getenv", True), ("pydantic_settings", False), ("pydantic_settings", True), ("magutils", False)):
             with self.subTest(backend=backend, optional=optional), tempfile.TemporaryDirectory() as tmp:
                 dest = Path(tmp) / "settings-service"
                 render(dest, dict(settings_backend=backend, use_magutils=optional, database="sqlite"))
-                (dest / ".env").write_text("HOST=192.0.2.1\nPORT=19999\nDATABASE_URL=sqlite+aiosqlite:///dotenv.db\n")
-                result = execute(dest, 'from src.env import Settings\ns = Settings()\nassert s.host == "127.0.0.1"\nassert s.port == 8000\nassert str(s.database_url) != "sqlite+aiosqlite:///dotenv.db"\nprint("ok")')
+                if backend == "magutils":
+                    sync = subprocess.run(["uv", "sync", "--offline"], cwd=dest, env=os.environ.copy(), capture_output=True, timeout=120)
+                    self.assertEqual(sync.returncode, 0, "native fixture uv sync --offline failed; prepare dependencies in the active uv cache")
+                (dest / ".env").write_text("HOST=192.0.2.1\nPORT=19999\nDATABASE_URL=sqlite+aiosqlite:///dotenv.db\nAPI_TOKEN=synthetic-contract-token\n")
+                expected_host, expected_port = ("192.0.2.1", 19999) if backend == "magutils" else ("127.0.0.1", 8000)
+                result = execute(dest, 'from src.env import Settings\ns = Settings()\nassert s.host == ' + repr(expected_host) + '\nassert s.port == ' + str(expected_port))
                 self.assertEqual(result.returncode, 0, result.stdout)
                 result = execute(dest, 'from src.env import Settings\ns = Settings()\nassert s.host == "127.0.0.2"\nassert s.port == 18765\nassert str(s.database_url) == "sqlite+aiosqlite:///explicit.db"\nprint("ok")', {"HOST":"127.0.0.2", "PORT":"18765", "DATABASE_URL":"sqlite+aiosqlite:///explicit.db"})
                 self.assertEqual(result.returncode, 0, result.stdout)
