@@ -1,0 +1,34 @@
+"""Request-local incoming trace ID; never generated, validated or returned as a header."""
+
+from contextvars import ContextVar
+
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+_trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
+
+
+def get_trace_id() -> str | None:
+    """Return the first incoming X-Trace-ID, or None outside a traced HTTP request."""
+    return _trace_id.get()
+
+
+class TraceIDMiddleware:
+    """Scope X-Trace-ID to each HTTP request, including mounted applications."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        trace_id = None
+        for name, value in scope["headers"]:
+            if name.lower() == b"x-trace-id":
+                trace_id = value.decode("latin-1")
+                break
+        token = _trace_id.set(trace_id)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _trace_id.reset(token)

@@ -1,0 +1,64 @@
+"""Public resource and HTTP contracts, independent of implementation details."""
+import asyncio
+from collections.abc import Mapping
+from typing import Any
+import os
+
+import pytest
+{% if use_http_api %}
+import httpx
+from {{ package_name }}.app import app
+{% endif %}
+from {{ package_name }}.config import Settings
+from {{ package_name }}.resources import resources
+
+
+def resource_value(state: Any, name: str) -> Any:
+    return state[name] if isinstance(state, Mapping) else getattr(state, name)
+
+
+def test_settings_read_environment_at_creation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOST", "127.0.0.2")
+    monkeypatch.setenv("PORT", "18081")
+    first = Settings()
+    monkeypatch.setenv("PORT", "18082")
+    second = Settings()
+    assert first.host == "127.0.0.2"
+    assert first.port == 18081
+    assert second.port == 18082
+
+
+@pytest.mark.asyncio
+async def test_resources_close_on_success_and_error() -> None:
+    for fail in (False, True):
+        state = None
+        try:
+            async with resources() as current:
+                state = current
+                assert resource_value(state, "settings") is not None
+{% if database != 'none' %}
+                assert resource_value(state, "engine") is not None
+                assert resource_value(state, "sessions") is not None
+{% endif %}
+{% if use_http_client %}
+                assert not resource_value(state, "http_client").is_closed
+                assert resource_value(state, "http_client").timeout.read is not None
+{% endif %}
+                if fail:
+                    raise RuntimeError("synthetic contract error")
+        except RuntimeError as error:
+            assert str(error) == "synthetic contract error"
+{% if use_http_client %}
+        assert resource_value(state, "http_client").is_closed
+{% endif %}
+{% if use_http_api %}
+
+@pytest.mark.asyncio
+async def test_health() -> None:
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/health", headers={"X-Trace-ID": "literal-id"})
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert "x-trace-id" not in response.headers
+{% endif %}

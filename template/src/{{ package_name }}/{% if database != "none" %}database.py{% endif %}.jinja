@@ -1,0 +1,39 @@
+"""Async SQL resources; creation never opens a connection or creates a schema."""
+
+from sqlalchemy import URL, make_url
+from sqlalchemy.exc import ArgumentError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    """Empty metadata; add application models explicitly."""
+
+
+def database_url(value: str) -> URL:
+    try:
+        url = make_url(value)
+        valid = url.drivername == "{{ {'postgresql': 'postgresql+asyncpg', 'sqlite': 'sqlite+aiosqlite', 'mysql': 'mysql+asyncmy'}[database] }}"
+{% if database != 'sqlite' %}
+        valid = valid and bool(url.host) and bool(url.database)
+{% else %}
+        valid = valid and bool(url.database)
+{% endif %}
+    except ValueError, TypeError, ArgumentError:
+        raise ValueError("Invalid DATABASE_URL for the selected async database driver") from None
+    if not valid:
+        raise ValueError("DATABASE_URL must use {{ {'postgresql': 'postgresql+asyncpg', 'sqlite': 'sqlite+aiosqlite', 'mysql': 'mysql+asyncmy'}[database] }} with a database")
+    return url
+
+
+def create_engine(value: str) -> AsyncEngine:
+    return create_async_engine(database_url(value), echo=False, hide_parameters=True)
+
+
+def session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(engine, expire_on_commit=False)

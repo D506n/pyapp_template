@@ -1,0 +1,23 @@
+"""MCP ping takes no arguments and returns the string pong."""
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+from fastmcp import FastMCP
+
+from {{ package_name }}.resources import resources
+
+
+@asynccontextmanager
+async def mcp_lifespan(server: FastMCP) -> AsyncGenerator[dict[str, object]]:
+    async with resources() as state:
+        yield state
+
+
+mcp = FastMCP({{ project_name | tojson }}, lifespan=mcp_lifespan)
+
+
+@mcp.tool
+async def ping() -> str:
+    """Return pong; accepts no arguments and performs no external operations."""
+    return "pong"

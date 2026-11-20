@@ -1,0 +1,122 @@
+"""Trace context lifecycle verified against synthetic ASGI applications."""
+import asyncio
+from typing import Any
+
+import pytest
+
+from {{ package_name }}.trace import TraceIDMiddleware, get_trace_id
+
+
+class Probe:
+    def __init__(self, error: bool = False, block: bool = False) -> None:
+        self.seen = []
+        self.error = error
+        self.block = block
+        self.entered = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        before = get_trace_id()
+        self.entered.set()
+        if self.block:
+            await self.release.wait()
+        await asyncio.sleep(0)
+        self.seen.append((before, get_trace_id()))
+        if self.error:
+            raise RuntimeError("synthetic failure")
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+
+class Sink:
+    def __init__(self) -> None:
+        self.messages = []
+        self.trace = []
+
+    async def send(self, message: dict) -> None:
+        self.messages.append(message)
+        self.trace.append(get_trace_id())
+
+    async def receive(self) -> dict:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+
+def scope(headers: list) -> dict:
+    return {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "GET", "scheme": "http", "path": "/", "raw_path": b"/", "query_string": b"", "root_path": "", "headers": headers, "server": ("test", 80), "client": ("test", 1000)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("headers, expected", [([], None), ([(b"x-trace-id", b"  literal-ID  ")], "  literal-ID  "), ([(b"x-trace-id", b"")], ""), ([(b"X-TrAcE-ID", b"  literal-ID  ")], "  literal-ID  "), ([(b"x-trace-id", b"first"), (b"X-TRACE-ID", b"second")], "first")])
+async def test_trace_values_and_reset(headers: list, expected: str | None) -> None:
+    probe, sink = Probe(), Sink()
+    assert get_trace_id() is None
+    await TraceIDMiddleware(probe)(scope(headers), sink.receive, sink.send)
+    assert probe.seen == [(expected, expected)]
+    assert sink.trace == [expected, expected]
+    assert all(key.lower() != b"x-trace-id" for message in sink.messages for key, value in message.get("headers", []))
+    assert get_trace_id() is None
+
+
+@pytest.mark.asyncio
+async def test_error_resets_same_task() -> None:
+    probe, sink = Probe(error=True), Sink()
+    with pytest.raises(RuntimeError, match="synthetic failure"):
+        await TraceIDMiddleware(probe)(scope([(b"x-trace-id", b"error")]), sink.receive, sink.send)
+    assert get_trace_id() is None
+
+
+class CancelledRequest:
+    def __init__(self, probe: Probe) -> None:
+        self.probe = probe
+        self.after = "not observed"
+
+    async def run(self) -> None:
+        sink = Sink()
+        try:
+            await TraceIDMiddleware(self.probe)(scope([(b"x-trace-id", b"cancel")]), sink.receive, sink.send)
+        finally:
+            self.after = get_trace_id()
+
+
+@pytest.mark.asyncio
+async def test_cancellation_resets_in_cancelled_task() -> None:
+    probe = Probe(block=True)
+    request = CancelledRequest(probe)
+    task = asyncio.create_task(request.run())
+    await asyncio.wait_for(probe.entered.wait(), 5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert request.after is None
+    assert get_trace_id() is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_requests_do_not_share_context() -> None:
+    first, second = Probe(block=True), Probe(block=True)
+    sink = Sink()
+    a = asyncio.create_task(TraceIDMiddleware(first)(scope([(b"x-trace-id", b"a")]), sink.receive, sink.send))
+    b = asyncio.create_task(TraceIDMiddleware(second)(scope([(b"x-trace-id", b"b")]), sink.receive, sink.send))
+    await asyncio.wait_for(asyncio.gather(first.entered.wait(), second.entered.wait()), 5)
+    first.release.set()
+    second.release.set()
+    await asyncio.gather(a, b)
+    assert first.seen == [("a", "a")]
+    assert second.seen == [("b", "b")]
+    assert get_trace_id() is None
+{% if use_mcp %}
+
+@pytest.mark.asyncio
+async def test_mounted_mcp_is_inside_trace_context() -> None:
+    # Import after test initialization; this is the public application entry point.
+    from {{ package_name }}.app import app
+    sink = Sink()
+    request_scope = scope([(b"x-trace-id", b"mounted"), (b"accept", b"application/json, text/event-stream")])
+    request_scope.update(path="/mcp/", raw_path=b"/mcp/", method="DELETE")
+    async with app.router.lifespan_context(app):
+        await app(request_scope, sink.receive, sink.send)
+    assert sink.messages
+    assert all(value == "mounted" for value in sink.trace)
+    assert all(key.lower() != b"x-trace-id" for message in sink.messages for key, value in message.get("headers", []))
+    assert get_trace_id() is None
+{% endif %}

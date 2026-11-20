@@ -1,0 +1,29 @@
+"""Run the service; application logs go to stderr."""
+
+import logging
+
+{% if use_http_api or mcp_transport == 'http' %}
+import uvicorn
+
+from {{ package_name }}.config import Settings
+{% else %}
+from {{ package_name }}.mcp_server import mcp
+{% endif %}
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+{% if use_http_api or mcp_transport == 'http' %}
+    settings = Settings()
+    uvicorn.run(
+        "{{ package_name }}.app:app",
+        host=settings.host,
+        port=settings.port,
+    )
+{% else %}
+    mcp.run(transport="stdio", show_banner=False)
+{% endif %}
+
+
+if __name__ == "__main__":
+    main()
